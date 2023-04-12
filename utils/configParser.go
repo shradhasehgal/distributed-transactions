@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"bufio"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func parseConfigFile(curNode string, configFile string, nodeToUrl map[string]string) (int, error) {
+func ParseConfigFile(configFile string, nodeToUrl map[string]string) (int, error) {
 	var totalNodes = 0
 	file, err := os.Open(configFile)
 	if err != nil {

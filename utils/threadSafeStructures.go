@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"encoding/gob"
@@ -6,67 +6,67 @@ import (
 )
 
 type SafeEncoderMap struct {
-	mu sync.RWMutex
-	m  map[string]*gob.Encoder
+	Mu sync.RWMutex
+	M  map[string]*gob.Encoder
 }
 
-func getTotalNodes(encoderMap *SafeEncoderMap) int {
-	defer encoderMap.mu.RUnlock()
-	encoderMap.mu.RLock()
-	return len(encoderMap.m)
+func GetTotalNodes(encoderMap *SafeEncoderMap) int {
+	defer encoderMap.Mu.RUnlock()
+	encoderMap.Mu.RLock()
+	return len(encoderMap.M)
 }
 
-func getEncoder(encoderMap *SafeEncoderMap, nodeName string) *gob.Encoder {
-	defer encoderMap.mu.RUnlock()
-	encoderMap.mu.RLock()
-	return encoderMap.m[nodeName]
+func GetEncoder(encoderMap *SafeEncoderMap, nodeName string) *gob.Encoder {
+	defer encoderMap.Mu.RUnlock()
+	encoderMap.Mu.RLock()
+	return encoderMap.M[nodeName]
 }
 
-func setEncoder(encoderMap *SafeEncoderMap, nodeName string, encoder *gob.Encoder) {
-	defer encoderMap.mu.Unlock()
-	encoderMap.mu.Lock()
-	encoderMap.m[nodeName] = encoder
+func SetEncoder(encoderMap *SafeEncoderMap, nodeName string, encoder *gob.Encoder) {
+	defer encoderMap.Mu.Unlock()
+	encoderMap.Mu.Lock()
+	encoderMap.M[nodeName] = encoder
 }
 
-func deleteNode(encoderMap *SafeEncoderMap, nodeName string) {
-	defer encoderMap.mu.Unlock()
-	encoderMap.mu.Lock()
-	delete(encoderMap.m, nodeName)
-}
+// func DeleteNode(encoderMap *SafeEncoderMap, nodeName string) {
+// 	defer encoderMap.Mu.Unlock()
+// 	encoderMap.Mu.Lock()
+// 	delete(encoderMap.M, nodeName)
+// }
 
-func receivedFromAllAliveNodes(encoderMap *SafeEncoderMap, receivedFrom *[]string) bool {
-	defer encoderMap.mu.RUnlock()
-	encoderMap.mu.RLock()
-	totalAliveNodes := len(encoderMap.m)
-	numReceivedFromAlive := 0
-	for _, nodeName := range *receivedFrom {
-		_, found := encoderMap.m[nodeName]
-		// We have found a received proposal from a node that's alive (at least
-		// according to our map). It may actually be dead and the handleConnection
-		// goroutine may be waiting to update this in the encoderMap, but that's
-		// okay. Eventually when we send acceptance messages, the node would not
-		// be in encoderMap.
-		if found {
-			numReceivedFromAlive++
-		}
-	}
-	return numReceivedFromAlive == totalAliveNodes
-}
+// func ReceivedFromAllAliveNodes(encoderMap *SafeEncoderMap, receivedFrom *[]string) bool {
+// 	defer encoderMap.Mu.RUnlock()
+// 	encoderMap.Mu.RLock()
+// 	totalAliveNodes := len(encoderMap.M)
+// 	numReceivedFromAlive := 0
+// 	for _, nodeName := range *receivedFrom {
+// 		_, found := encoderMap.M[nodeName]
+// 		// We have found a received proposal from a node that's alive (at least
+// 		// according to our map). It may actually be dead and the handleConnection
+// 		// goroutine may be waiting to update this in the encoderMap, but that's
+// 		// okay. Eventually when we send acceptance messages, the node would not
+// 		// be in encoderMap.
+// 		if found {
+// 			numReceivedFromAlive++
+// 		}
+// 	}
+// 	return numReceivedFromAlive == totalAliveNodes
+// }
 
-type SafeReceivedMap struct {
-	mu sync.RWMutex
-	m  map[string]int
-}
+// type SafeReceivedMap struct {
+// 	mu sync.RWMutex
+// 	m  map[string]int
+// }
 
-func isReceived(received *SafeReceivedMap, msgId string) bool {
-	defer received.mu.Unlock()
-	received.mu.Lock()
-	_, found := received.m[msgId]
-	if !found {
-		received.m[msgId] = 1
-	}
-	return found
-}
+// func IsReceived(received *SafeReceivedMap, msgId string) bool {
+// 	defer received.mu.Unlock()
+// 	received.mu.Lock()
+// 	_, found := received.m[msgId]
+// 	if !found {
+// 		received.m[msgId] = 1
+// 	}
+// 	return found
+// }
 
 // func markAsReceived(received *SafeReceivedMap, msgId string) {
 // 	defer received.mu.Unlock()
@@ -74,30 +74,30 @@ func isReceived(received *SafeReceivedMap, msgId string) bool {
 
 // }
 
-type SafeMaxPriority struct {
-	mu              sync.Mutex
-	currMaxPriority int
-}
+// type SafeMaxPriority struct {
+// 	mu              sync.Mutex
+// 	currMaxPriority int
+// }
 
-func initializePriority(p *SafeMaxPriority) {
-	p.mu.Lock()
-	p.currMaxPriority = 1
-	p.mu.Unlock()
-}
+// func InitializePriority(p *SafeMaxPriority) {
+// 	p.mu.Lock()
+// 	p.currMaxPriority = 1
+// 	p.mu.Unlock()
+// }
 
-func getPriorityAndIncrement(p *SafeMaxPriority) int {
-	p.mu.Lock()
-	me := p.currMaxPriority
-	p.currMaxPriority++
-	p.mu.Unlock()
-	return me
-}
+// func GetPriorityAndIncrement(p *SafeMaxPriority) int {
+// 	p.mu.Lock()
+// 	me := p.currMaxPriority
+// 	p.currMaxPriority++
+// 	p.mu.Unlock()
+// 	return me
+// }
 
-func setPriority(p *SafeMaxPriority, value int) {
-	p.mu.Lock()
-	p.currMaxPriority = Max(p.currMaxPriority, value+1)
-	p.mu.Unlock()
-}
+// func SetPriority(p *SafeMaxPriority, value int) {
+// 	p.mu.Lock()
+// 	p.currMaxPriority = Max(p.currMaxPriority, value+1)
+// 	p.mu.Unlock()
+// }
 
 // type SafeMsgIDToLocalPriorityMap struct {
 // 	mu sync.RWMutex

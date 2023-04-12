@@ -2,13 +2,12 @@ package main
 
 import (
 	"encoding/gob"
-	"fmt"
 	"log"
 	"net"
 	"os"
 	"strings"
 	"sync"
-	"time"
+	"utils"
 
 	logrus "github.com/sirupsen/logrus"
 )
@@ -38,7 +37,7 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 	return f, logger, nil
 }
 
-func acceptConnections(listener net.Listener, nodeToEncoder *SafeEncoderMap, outgoingConnectionsDone chan bool, incomingConnectionsDone chan bool, totalNodes int) {
+func acceptConnections(listener net.Listener, nodeToEncoder *utils.SafeEncoderMap, outgoingConnectionsDone chan bool, incomingConnectionsDone chan bool, totalNodes int) {
 	var numCompleted = 0
 
 	for <-outgoingConnectionsDone {
@@ -48,6 +47,7 @@ func acceptConnections(listener net.Listener, nodeToEncoder *SafeEncoderMap, out
 			break
 		}
 	}
+
 	for {
 		connection, err := listener.Accept()
 		incomingConnectionsDone <- true
@@ -103,7 +103,7 @@ func acceptConnections(listener net.Listener, nodeToEncoder *SafeEncoderMap, out
 // }
 
 // func handleConnection(connection net.Conn, received *SafeReceivedMap, nodeToEncoder *SafeEncoderMap, p *SafeMaxPriority, msgToChannel *SafeMsgIDToChannelMap, msgIDToLocalPriority *SafeMsgIDToLocalPriorityMap, safeIsisPq *SafePriorityQueue, deliveryLogger *log.Logger, msgIDtoTransaction *SafeMsgIDToTransaction, accountsToBalances *SafeAccountsToBalances, txnLogger *log.Logger, measurementsLogger *log.Logger) {
-func handleConnection(connection net.Conn, nodeToEncoder *SafeEncoderMap) {
+func handleConnection(connection net.Conn, nodeToEncoder *utils.SafeEncoderMap) {
 
 	defer connection.Close()
 	logrusLogger.WithField("node", currNodeName).Debug("Connection from ", connection.RemoteAddr().String())
@@ -146,25 +146,6 @@ func listenOnPort(port string) (net.Listener, error) {
 		return nil, err
 	}
 	return listener, nil
-}
-
-func establishConnection(nodeName string, address string, wg *sync.WaitGroup, nodeToEncoder *SafeEncoderMap, outgoingConnectionsDone chan bool) {
-	defer wg.Done()
-	for true {
-		connection, err := net.Dial("tcp", address)
-		if err != nil {
-			logrusLogger.WithField("node", currNodeName).Debug("Error encountered while establishing TCP connection with ", address, " - ", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		encoder := gob.NewEncoder(connection)
-		setEncoder(nodeToEncoder, nodeName, encoder)
-		// var msg = Message{Type: "registration", Payload: Registration{NodeID: currNodeName}}
-		// unicast(encoder, msg)
-		break
-	}
-	outgoingConnectionsDone <- true
-	logrusLogger.WithField("node", currNodeName).Debug("Connected to ", nodeName)
 }
 
 // func sendMsg(encoder *gob.Encoder, msg Message, wg *sync.WaitGroup) {
@@ -246,12 +227,6 @@ func establishConnection(nodeName string, address string, wg *sync.WaitGroup, no
 // 	wg.Wait()
 // }
 
-func initlogrusLogger() {
-	logrusLogger = logrus.New()
-	logrusLogger.SetFormatter(&logrus.TextFormatter{TimestampFormat: "2006-01-02 15:04:05.000000", FullTimestamp: true})
-	logrusLogger.SetLevel(logrus.DebugLevel)
-}
-
 // func initGob() {
 // 	gob.Register(Registration{})
 // 	gob.Register(Transaction{})
@@ -268,15 +243,16 @@ func main() {
 	currNodeName = arguments[1]
 	config := arguments[2]
 	// initGob()
-	initlogrusLogger()
+	utils.InitlogrusLogger(logrusLogger)
 
-	fmt.Println("Starting node ", currNodeName, " with config file ", config)
+	logrusLogger.WithField("node", currNodeName).Debug("Starting node ", currNodeName, " with config file ", config)
+
 	// txnId := 0
 	nodeToUrl := map[string]string{}
 	// received := SafeReceivedMap{m: make(map[string]int)}
-	totalNodes, _ := parseConfigFile(currNodeName, config, nodeToUrl)
+	totalNodes, _ := utils.ParseConfigFile(config, nodeToUrl)
 	var wg sync.WaitGroup
-	nodeToEncoder := SafeEncoderMap{m: make(map[string]*gob.Encoder)}
+	nodeToEncoder := utils.SafeEncoderMap{M: make(map[string]*gob.Encoder)}
 	// msgToChannel := SafeMsgIDToChannelMap{m: make(map[string](chan *Proposal))}
 	// msgIDToTransaction := SafeMsgIDToTransaction{m: make(map[string]*Transaction)}
 	// accountsToBalances := SafeAccountsToBalances{m: make(map[string]int)}
@@ -305,7 +281,7 @@ func main() {
 
 	for nodeName, address := range nodeToUrl {
 		wg.Add(1)
-		go establishConnection(nodeName, address, &wg, &nodeToEncoder, outgoingConnectionsDone)
+		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &nodeToEncoder, outgoingConnectionsDone, logrusLogger)
 	}
 	wg.Wait()
 	var numCompleted = 0
@@ -317,7 +293,9 @@ func main() {
 			break
 		}
 	}
+	for {
 
+	}
 	// scanner := bufio.NewScanner(os.Stdin)
 	// var txn = Transaction{}
 	// var msg = Message{}
