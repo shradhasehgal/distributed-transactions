@@ -1,0 +1,4 @@
+3
+node1 localhost 1234
+node2 localhost 2345
+node3 localhost 3456
