@@ -2,12 +2,11 @@ package main
 
 import (
 	"bufio"
-	"encoding/gob"
 	"fmt"
 	"os"
+	"protos"
 	"strings"
 	"sync"
-
 	"utils"
 
 	"github.com/sirupsen/logrus"
@@ -26,13 +25,12 @@ func main() {
 	config := arguments[2]
 	utils.InitlogrusLogger(logrusLogger)
 	nodeToUrl := map[string]string{}
-	nodeToEncoder := utils.SafeEncoderMap{M: make(map[string]*gob.Encoder)}
+	nodeToClient := utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)}
 	logrusLogger.WithField("node", clientID).Debug("Starting node ", clientID, " with config file ", config)
-	totalNodes, _ := utils.ParseConfigFile(config, nodeToUrl)
-	outgoingConnectionsDone := make(chan bool, totalNodes)
+	utils.ParseConfigFile(config, nodeToUrl)
 	for nodeName, address := range nodeToUrl {
 		wg.Add(1)
-		go utils.EstablishConnection(clientID, nodeName, address, &wg, &nodeToEncoder, outgoingConnectionsDone, logrusLogger)
+		go utils.EstablishConnection(clientID, nodeName, address, &wg, &nodeToClient, logrusLogger)
 	}
 	wg.Wait()
 

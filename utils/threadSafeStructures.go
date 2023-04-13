@@ -1,32 +1,43 @@
 package utils
 
 import (
-	"encoding/gob"
+	"protos"
 	"sync"
 )
 
-type SafeEncoderMap struct {
+type SafeRPCClientMap struct {
 	Mu sync.RWMutex
-	M  map[string]*gob.Encoder
+	M  map[string]protos.DistributedTransactionsClient
 }
 
-func GetTotalNodes(encoderMap *SafeEncoderMap) int {
-	defer encoderMap.Mu.RUnlock()
-	encoderMap.Mu.RLock()
-	return len(encoderMap.M)
+func SetClient(clientMap *SafeRPCClientMap, nodeName string, client protos.DistributedTransactionsClient) {
+	defer clientMap.Mu.Unlock()
+	clientMap.Mu.Lock()
+	clientMap.M[nodeName] = client
 }
 
-func GetEncoder(encoderMap *SafeEncoderMap, nodeName string) *gob.Encoder {
-	defer encoderMap.Mu.RUnlock()
-	encoderMap.Mu.RLock()
-	return encoderMap.M[nodeName]
-}
+// type SafeEncoderMap struct {
+// 	Mu sync.RWMutex
+// 	M  map[string]*gob.Encoder
+// }
 
-func SetEncoder(encoderMap *SafeEncoderMap, nodeName string, encoder *gob.Encoder) {
-	defer encoderMap.Mu.Unlock()
-	encoderMap.Mu.Lock()
-	encoderMap.M[nodeName] = encoder
-}
+// func GetTotalNodes(encoderMap *SafeEncoderMap) int {
+// 	defer encoderMap.Mu.RUnlock()
+// 	encoderMap.Mu.RLock()
+// 	return len(encoderMap.M)
+// }
+
+// func GetEncoder(encoderMap *SafeEncoderMap, nodeName string) *gob.Encoder {
+// 	defer encoderMap.Mu.RUnlock()
+// 	encoderMap.Mu.RLock()
+// 	return encoderMap.M[nodeName]
+// }
+
+// func SetEncoder(encoderMap *SafeEncoderMap, nodeName string, encoder *gob.Encoder) {
+// 	defer encoderMap.Mu.Unlock()
+// 	encoderMap.Mu.Lock()
+// 	encoderMap.M[nodeName] = encoder
+// }
 
 // func DeleteNode(encoderMap *SafeEncoderMap, nodeName string) {
 // 	defer encoderMap.Mu.Unlock()

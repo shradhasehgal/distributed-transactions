@@ -1,29 +1,31 @@
 package utils
 
 import (
-	"encoding/gob"
-	"net"
+	"protos"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-func EstablishConnection(currNodeName string, nodeName string, address string, wg *sync.WaitGroup, nodeToEncoder *SafeEncoderMap, outgoingConnectionsDone chan bool, logrusLogger *logrus.Logger) {
+func EstablishConnection(currNodeName string, nodeName string, address string, wg *sync.WaitGroup, nodeToClient *SafeRPCClientMap, logrusLogger *logrus.Logger) {
+	// Decrement the counter when the goroutine completes.
 	defer wg.Done()
 	for {
-		connection, err := net.Dial("tcp", address)
+		var opts []grpc.DialOption
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.Dial(address, opts...)
 		if err != nil {
 			logrusLogger.WithField("node", currNodeName).Debug("Error encountered while establishing TCP connection with ", address, " - ", err)
-			time.Sleep(2 * time.Second)
+			time.Sleep(10 * time.Second)
 			continue
 		}
-		encoder := gob.NewEncoder(connection)
-		SetEncoder(nodeToEncoder, nodeName, encoder)
-		// var msg = Message{Type: "registration", Payload: Registration{NodeID: currNodeName}}
-		// unicast(encoder, msg)
+		client := protos.NewDistributedTransactionsClient(conn)
+		SetClient(nodeToClient, nodeName, client)
+
 		break
 	}
-	outgoingConnectionsDone <- true
-	logrusLogger.WithField("node", currNodeName).Debug("Connected to ", nodeName)
+	logrusLogger.WithField("node", currNodeName).Debug("Connected to  ", nodeName, "->", address)
 }

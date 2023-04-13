@@ -1,16 +1,26 @@
 package main
 
 import (
-	"encoding/gob"
 	"log"
 	"net"
 	"os"
+	"protos"
 	"strings"
 	"sync"
 	"utils"
 
 	logrus "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 )
+
+type distributedTransactionsServer struct {
+	protos.UnimplementedDistributedTransactionsServer
+}
+
+func newServer() *distributedTransactionsServer {
+	s := &distributedTransactionsServer{}
+	return s
+}
 
 var currNodeName string
 
@@ -37,7 +47,7 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 	return f, logger, nil
 }
 
-func acceptConnections(listener net.Listener, nodeToEncoder *utils.SafeEncoderMap, outgoingConnectionsDone chan bool, incomingConnectionsDone chan bool, totalNodes int) {
+func acceptConnections(listener net.Listener, nodeToEncoder *utils.SafeRPCClientMap, outgoingConnectionsDone chan bool, incomingConnectionsDone chan bool, totalNodes int) {
 	var numCompleted = 0
 
 	for <-outgoingConnectionsDone {
@@ -103,38 +113,38 @@ func acceptConnections(listener net.Listener, nodeToEncoder *utils.SafeEncoderMa
 // }
 
 // func handleConnection(connection net.Conn, received *SafeReceivedMap, nodeToEncoder *SafeEncoderMap, p *SafeMaxPriority, msgToChannel *SafeMsgIDToChannelMap, msgIDToLocalPriority *SafeMsgIDToLocalPriorityMap, safeIsisPq *SafePriorityQueue, deliveryLogger *log.Logger, msgIDtoTransaction *SafeMsgIDToTransaction, accountsToBalances *SafeAccountsToBalances, txnLogger *log.Logger, measurementsLogger *log.Logger) {
-func handleConnection(connection net.Conn, nodeToEncoder *utils.SafeEncoderMap) {
+// func handleConnection(connection net.Conn, nodeToEncoder *utils.SafeEncoderMap) {
 
-	defer connection.Close()
-	logrusLogger.WithField("node", currNodeName).Debug("Connection from ", connection.RemoteAddr().String())
-	// decoder := gob.NewDecoder(connection)
-	// connectingNode := ""
-	for {
-		// var msg Message
-		// err := decoder.Decode(&msg)
-		// if err != nil {
-		// 	if err == io.EOF {
-		// 		logrusLogger.WithField("node", currNodeName).Debug(connectingNode, " has failed!")
-		// 		deleteNode(nodeToEncoder, connectingNode)
-		// 		return
-		// 	}
-		// 	logrusLogger.WithField("node", currNodeName).Error("Decode error: ", err)
-		// } else {
-		// 	if msg.Type == "transaction" {
-		// 		handleTxnMsg(&msg, received, nodeToEncoder, p, msgIDToLocalPriority, safeIsisPq, msgIDtoTransaction)
-		// 	} else if msg.Type == "proposal" {
-		// 		handleProposalMsg(&msg, msgToChannel)
-		// 	} else if msg.Type == "acceptance" {
-		// 		handleAcceptMsg(&msg, msgIDToLocalPriority, safeIsisPq, deliveryLogger, msgIDtoTransaction, accountsToBalances, txnLogger, nodeToEncoder, measurementsLogger)
-		// 	} else if msg.Type == "registration" {
-		// 		registration, _ := msg.Payload.(Registration)
-		// 		connectingNode = registration.NodeID
-		// 	}
+// 	defer connection.Close()
+// 	logrusLogger.WithField("node", currNodeName).Debug("Connection from ", connection.RemoteAddr().String())
+// 	// decoder := gob.NewDecoder(connection)
+// 	// connectingNode := ""
+// 	for {
+// 		// var msg Message
+// 		// err := decoder.Decode(&msg)
+// 		// if err != nil {
+// 		// 	if err == io.EOF {
+// 		// 		logrusLogger.WithField("node", currNodeName).Debug(connectingNode, " has failed!")
+// 		// 		deleteNode(nodeToEncoder, connectingNode)
+// 		// 		return
+// 		// 	}
+// 		// 	logrusLogger.WithField("node", currNodeName).Error("Decode error: ", err)
+// 		// } else {
+// 		// 	if msg.Type == "transaction" {
+// 		// 		handleTxnMsg(&msg, received, nodeToEncoder, p, msgIDToLocalPriority, safeIsisPq, msgIDtoTransaction)
+// 		// 	} else if msg.Type == "proposal" {
+// 		// 		handleProposalMsg(&msg, msgToChannel)
+// 		// 	} else if msg.Type == "acceptance" {
+// 		// 		handleAcceptMsg(&msg, msgIDToLocalPriority, safeIsisPq, deliveryLogger, msgIDtoTransaction, accountsToBalances, txnLogger, nodeToEncoder, measurementsLogger)
+// 		// 	} else if msg.Type == "registration" {
+// 		// 		registration, _ := msg.Payload.(Registration)
+// 		// 		connectingNode = registration.NodeID
+// 		// 	}
 
-		// }
+// 		// }
 
-	}
-}
+// 	}
+// }
 
 // Starts listening on all available unicast and anycast IP addresses
 // of the local system, at the specified port.
@@ -250,9 +260,7 @@ func main() {
 	// txnId := 0
 	nodeToUrl := map[string]string{}
 	// received := SafeReceivedMap{m: make(map[string]int)}
-	totalNodes, _ := utils.ParseConfigFile(config, nodeToUrl)
-	var wg sync.WaitGroup
-	nodeToEncoder := utils.SafeEncoderMap{M: make(map[string]*gob.Encoder)}
+
 	// msgToChannel := SafeMsgIDToChannelMap{m: make(map[string](chan *Proposal))}
 	// msgIDToTransaction := SafeMsgIDToTransaction{m: make(map[string]*Transaction)}
 	// accountsToBalances := SafeAccountsToBalances{m: make(map[string]int)}
@@ -269,33 +277,26 @@ func main() {
 
 	// logrusLogger.WithField("node", currNodeName).Debug("Total Nodes to connect to: ", totalNodes)
 
+	utils.ParseConfigFile(config, nodeToUrl)
+	var wg sync.WaitGroup
+	nodeToClient := utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)}
+
 	s := strings.Split(nodeToUrl[currNodeName], ":")
 	listener, err := listenOnPort(s[1])
 	if err != nil {
 		log.Fatal(err)
 	}
-	outgoingConnectionsDone := make(chan bool, totalNodes)
-	incomingConnectionsDone := make(chan bool, totalNodes)
-
-	go acceptConnections(listener, &nodeToEncoder, outgoingConnectionsDone, incomingConnectionsDone, totalNodes)
 
 	for nodeName, address := range nodeToUrl {
 		wg.Add(1)
-		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &nodeToEncoder, outgoingConnectionsDone, logrusLogger)
+		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &nodeToClient, logrusLogger)
 	}
 	wg.Wait()
-	var numCompleted = 0
-	for <-incomingConnectionsDone {
-		numCompleted++
-		logrusLogger.WithField("node", currNodeName).Debug("Waiting for incoming connections. Currently connected: ", numCompleted)
 
-		if numCompleted == totalNodes {
-			break
-		}
-	}
-	for {
-
-	}
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	protos.RegisterDistributedTransactionsServer(grpcServer, newServer())
+	grpcServer.Serve(listener)
 	// scanner := bufio.NewScanner(os.Stdin)
 	// var txn = Transaction{}
 	// var msg = Message{}
