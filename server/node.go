@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -14,12 +15,19 @@ import (
 	"google.golang.org/grpc"
 )
 
+type SafeTxnIdToServersInvolvedPtr struct {
+	Mu sync.RWMutex
+	M  map[string]*([]string) // txn ID given by client to a pointer to list of server names involved in TXN
+}
+
 type distributedTransactionsServer struct {
 	protos.UnimplementedDistributedTransactionsServer
+	txnID                     uint64
+	safeTxnIDToServerInvolved SafeTxnIdToServersInvolvedPtr
 }
 
 func newServer() *distributedTransactionsServer {
-	s := &distributedTransactionsServer{}
+	s := &distributedTransactionsServer{safeTxnIDToServerInvolved: SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))}}
 	return s
 }
 
@@ -49,18 +57,31 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 }
 
 func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.BeginTxnPayload) (*protos.Reply, error) {
+	s.safeTxnIDToServerInvolved.Mu.Lock()
+	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
+	fmt.Printf("yoyo")
+	var listOfServersInvolved = []string{}
+	s.safeTxnIDToServerInvolved.M[payload.TxnId] = &listOfServersInvolved
 	return &protos.Reply{Success: true}, nil
 }
 
 func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
 	return &protos.Reply{Success: true}, nil
 }
+
 func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
 	return &protos.Reply{Success: true}, nil
 }
+
 func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
+	s.safeTxnIDToServerInvolved.Mu.RLock()
+	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
+	listOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
+	*listOfServersInvolved = append(*listOfServersInvolved, payload.Branch)
+	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
 	return &protos.Reply{Success: true}, nil
 }
+
 func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
 	return &protos.Reply{Success: true}, nil
 }
