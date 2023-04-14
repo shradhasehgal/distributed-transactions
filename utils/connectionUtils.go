@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"protos"
 	"sync"
 	"time"
@@ -14,14 +15,15 @@ func EstablishConnection(currNodeName string, nodeName string, address string, w
 	// Decrement the counter when the goroutine completes.
 	defer wg.Done()
 	for {
-		var opts []grpc.DialOption
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		conn, err := grpc.Dial(address, opts...)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		defer cancel()
+
+		conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		if err != nil {
 			logrusLogger.WithField("node", currNodeName).Debug("Error encountered while establishing TCP connection with ", address, " - ", err)
-			time.Sleep(10 * time.Second)
 			continue
 		}
+		defer conn.Close()
 		client := protos.NewDistributedTransactionsClient(conn)
 		SetClient(nodeToClient, nodeName, client)
 

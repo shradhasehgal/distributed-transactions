@@ -313,12 +313,13 @@ func main() {
 		wg.Add(1)
 		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &nodeToClient, logrusLogger)
 	}
-	wg.Wait()
-
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	protos.RegisterDistributedTransactionsServer(grpcServer, newServer())
 	grpcServer.Serve(listener)
+
+	wg.Wait()
+
 	// scanner := bufio.NewScanner(os.Stdin)
 	// var txn = Transaction{}
 	// var msg = Message{}
