@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"os"
@@ -47,27 +48,8 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 	return f, logger, nil
 }
 
-func acceptConnections(listener net.Listener, nodeToEncoder *utils.SafeRPCClientMap, outgoingConnectionsDone chan bool, incomingConnectionsDone chan bool, totalNodes int) {
-	var numCompleted = 0
-
-	for <-outgoingConnectionsDone {
-		numCompleted++
-		logrusLogger.WithField("node", currNodeName).Debug("Waiting for outgoing connections. Currently connected: ", numCompleted)
-		if numCompleted == totalNodes {
-			break
-		}
-	}
-
-	for {
-		connection, err := listener.Accept()
-		incomingConnectionsDone <- true
-		if err != nil {
-			logrusLogger.WithField("node", currNodeName).Error("Error encountered while trying to accept incoming TCP connection: ", err)
-			return
-		}
-		logrusLogger.WithField("node", currNodeName).Debug("Accepted incoming TCP connection from ", connection.RemoteAddr().String())
-		// go handleConnection(connection, received, nodeToEncoder, p, msgToChannel, msgIDToLocalPriority, safeIsisPq, deliveryLogger, msgIDToTransaction, accountsToBalances, txnLogger, measurementsLogger)
-	}
+func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, getPayload *protos.BeginTxnPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
 }
 
 // func handleTxnMsg(msg *Message, received *SafeReceivedMap, nodeToEncoder *SafeEncoderMap, p *SafeMaxPriority, msgIDToLocalPriority *SafeMsgIDToLocalPriorityMap, safeIsisPq *SafePriorityQueue, msgIDToTransaction *SafeMsgIDToTransaction) {

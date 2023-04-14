@@ -22,7 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DistributedTransactionsClient interface {
-	BeginTransaction(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
+	BeginTransaction(ctx context.Context, in *BeginTxnPayload, opts ...grpc.CallOption) (*Reply, error)
 	CommitCoordinator(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
 	CommitPeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
 	PerformOperationCoordinator(ctx context.Context, in *TransactionOpPayload, opts ...grpc.CallOption) (*Reply, error)
@@ -39,7 +39,7 @@ func NewDistributedTransactionsClient(cc grpc.ClientConnInterface) DistributedTr
 	return &distributedTransactionsClient{cc}
 }
 
-func (c *distributedTransactionsClient) BeginTransaction(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) BeginTransaction(ctx context.Context, in *BeginTxnPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/beginTransaction", in, out, opts...)
 	if err != nil {
@@ -106,7 +106,7 @@ func (c *distributedTransactionsClient) AbortPeer(ctx context.Context, in *Abort
 // All implementations must embed UnimplementedDistributedTransactionsServer
 // for forward compatibility
 type DistributedTransactionsServer interface {
-	BeginTransaction(context.Context, *CommitPayload) (*Reply, error)
+	BeginTransaction(context.Context, *BeginTxnPayload) (*Reply, error)
 	CommitCoordinator(context.Context, *CommitPayload) (*Reply, error)
 	CommitPeer(context.Context, *CommitPayload) (*Reply, error)
 	PerformOperationCoordinator(context.Context, *TransactionOpPayload) (*Reply, error)
@@ -120,7 +120,7 @@ type DistributedTransactionsServer interface {
 type UnimplementedDistributedTransactionsServer struct {
 }
 
-func (UnimplementedDistributedTransactionsServer) BeginTransaction(context.Context, *CommitPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) BeginTransaction(context.Context, *BeginTxnPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BeginTransaction not implemented")
 }
 func (UnimplementedDistributedTransactionsServer) CommitCoordinator(context.Context, *CommitPayload) (*Reply, error) {
@@ -156,7 +156,7 @@ func RegisterDistributedTransactionsServer(s grpc.ServiceRegistrar, srv Distribu
 }
 
 func _DistributedTransactions_BeginTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommitPayload)
+	in := new(BeginTxnPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func _DistributedTransactions_BeginTransaction_Handler(srv interface{}, ctx cont
 		FullMethod: "/DistributedTransactions/beginTransaction",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).BeginTransaction(ctx, req.(*CommitPayload))
+		return srv.(DistributedTransactionsServer).BeginTransaction(ctx, req.(*BeginTxnPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -18,7 +18,7 @@ option go_package = "distributed-transactions/protos";
 
 
 service DistributedTransactions {
-  rpc beginTransaction(CommitPayload) returns (Reply) {}
+  rpc beginTransaction(BeginTxnPayload) returns (Reply) {}
   rpc commitCoordinator(CommitPayload) returns (Reply) {}
   rpc commitPeer(CommitPayload) returns (Reply) {}
   rpc performOperationCoordinator(TransactionOpPayload) returns (Reply) {}
@@ -27,6 +27,9 @@ service DistributedTransactions {
   rpc abortPeer(AbortPayload) returns (Reply) {}
 }
 
+message BeginTxnPayload {
+    string txnId = 1;
+}
 
 message CommitPayload {
     string txnId = 1;
