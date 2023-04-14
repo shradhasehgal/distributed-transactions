@@ -45,6 +45,39 @@ func beginTransaction(nodeName string, client protos.DistributedTransactionsClie
 	return resp
 }
 
+func abortTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.AbortPayload) *protos.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.AbortCoordinator(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", clientID).Fatal("client.AbortCoordinator failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
+func commitTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.CommitCoordinator(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", clientID).Fatal("client.CommitCoordinator failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
+func performOp(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.PerformOperationCoordinator(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", clientID).Fatal("client.PerformOperationCoordinator failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
 func main() {
 	arguments := os.Args
 	if len(arguments) != 3 {
@@ -89,9 +122,45 @@ func main() {
 			if reply.Success {
 				fmt.Println("OK")
 			}
-		} else if strings.ToLower(commandInfo[0]) == "transfer" {
-			if len(commandInfo) != 5 {
+		} else if strings.ToLower(commandInfo[0]) == "deposit" {
+			if len(commandInfo) != 3 {
 				continue
+			}
+			destinationDetails := strings.Split(commandInfo[1], ".")
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "DEPOSIT", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			if reply.Success {
+				fmt.Println("OK")
+			} else {
+				fmt.Println("ABORTED")
+			}
+		} else if strings.ToLower(commandInfo[0]) == "withdraw" {
+			if len(commandInfo) != 3 {
+				continue
+			}
+			destinationDetails := strings.Split(commandInfo[1], ".")
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "WITHDRAW", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			if reply.Success {
+				fmt.Println("OK")
+			} else {
+				fmt.Println("ABORTED")
+			}
+		} else if strings.ToLower(commandInfo[0]) == "commit" {
+			if len(commandInfo) != 1 {
+				continue
+			}
+			reply := commitTransaction(clientID, coordinatorClient, &protos.CommitPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			if reply.Success {
+				fmt.Println("COMMIT OK")
+			} else {
+				fmt.Println("ABORTED")
+			}
+		} else if strings.ToLower(commandInfo[0]) == "abort" {
+			if len(commandInfo) != 1 {
+				continue
+			}
+			reply := abortTransaction(clientID, coordinatorClient, &protos.AbortPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			if reply.Success {
+				fmt.Println("ABORTED")
 			}
 		}
 	}

@@ -48,7 +48,26 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 	return f, logger, nil
 }
 
-func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, getPayload *protos.BeginTxnPayload) (*protos.Reply, error) {
+func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.BeginTxnPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+
+func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
 	return &protos.Reply{Success: true}, nil
 }
 
