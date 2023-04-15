@@ -45,6 +45,7 @@ message TransactionOpPayload {
     string operation = 2;
     string account = 3;
     string branch = 4;
+    int32 amount = 5;
 }
 
 message Reply {
