@@ -25,6 +25,7 @@ service DistributedTransactions {
   rpc performOperationPeer(TransactionOpPayload) returns (Reply) {}
   rpc abortCoordinator(AbortPayload) returns (Reply) {}
   rpc abortPeer(AbortPayload) returns (Reply) {}
+  rpc preparePeer(CommitPayload) returns (Reply) {}
 }
 
 message BeginTxnPayload {
@@ -48,4 +49,8 @@ message TransactionOpPayload {
 
 message Reply {
     bool success = 1;
+}
+
+message PreparePayload {
+    string txnId = 1;
 }
