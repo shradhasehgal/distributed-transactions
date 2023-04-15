@@ -21,6 +21,13 @@ type SafeTxnIdToServersInvolvedPtr struct {
 	M  map[string]*([]string) // txn ID given by client to a pointer to list of server names involved in TXN
 }
 
+func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*([]string) {
+	s.safeTxnIDToServerInvolved.Mu.RLock()
+	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
+	listOfServersInvolved := s.safeTxnIDToServerInvolved.M
+	return listOfServersInvolved
+}
+
 type distributedTransactionsServer struct {
 	protos.UnimplementedDistributedTransactionsServer
 	txnID                     uint64
@@ -72,10 +79,30 @@ func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, pa
 }
 
 func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
+	listOfServersInvolved := GetServersInvolvedInTxn(s)
+	passing := true
+	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+		peer := utils.GetClient(&s.nodeToClient, serverName)
+		vote := PreparePeerWrapper(peer, payload)
+		if vote != nil && vote.Success == false {
+			passing = false
+			// return &protos.Reply{Success: false}, nil
+		}
+	}
+
+	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+		peer := utils.GetClient(&s.nodeToClient, serverName)
+		if passing == false {
+			AbortPeerWrapper(peer, payload)
+		} else {
+			CommitPeerWrapper(peer, payload)
+		}
+	}
 	return &protos.Reply{Success: true}, nil
 }
 
 func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
+
 	return &protos.Reply{Success: true}, nil
 }
 
@@ -109,6 +136,31 @@ func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, pa
 	return &protos.Reply{Success: true}, nil
 }
 func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
+	return &protos.Reply{Success: true}, nil
+}
+
+func PreparePeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	resp, err := peer.PreparePeer(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", currNodeName).Fatal("client.PreparePeer failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
+func PreparePeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	resp, err := peer.PreparePeer(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", currNodeName).Fatal("client.PreparePeer failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
+func (s *distributedTransactionsServer) PreparePeer(ctx context.Context, payload *protos.PreparePayload) (*protos.Reply, error) {
+
 	return &protos.Reply{Success: true}, nil
 }
 

@@ -144,6 +144,17 @@ func main() {
 			} else {
 				fmt.Println("ABORTED")
 			}
+		} else if strings.ToLower(commandInfo[0]) == "balance" {
+			if len(commandInfo) != 2 {
+				continue
+			}
+			destinationDetails := strings.Split(commandInfo[1], ".")
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "BALANCE", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			if reply.Success {
+				fmt.Println("OK")
+			} else {
+				fmt.Println("ABORTED")
+			}
 		} else if strings.ToLower(commandInfo[0]) == "commit" {
 			if len(commandInfo) != 1 {
 				continue
