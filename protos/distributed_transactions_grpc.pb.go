@@ -22,14 +22,14 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DistributedTransactionsClient interface {
-	BeginTransaction(ctx context.Context, in *BeginTxnPayload, opts ...grpc.CallOption) (*Reply, error)
-	CommitCoordinator(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
-	CommitPeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
+	BeginTransaction(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
+	CommitCoordinator(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
+	CommitPeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
 	PerformOperationCoordinator(ctx context.Context, in *TransactionOpPayload, opts ...grpc.CallOption) (*Reply, error)
 	PerformOperationPeer(ctx context.Context, in *TransactionOpPayload, opts ...grpc.CallOption) (*Reply, error)
-	AbortCoordinator(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error)
-	AbortPeer(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error)
-	PreparePeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
+	AbortCoordinator(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
+	AbortPeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
+	PreparePeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type distributedTransactionsClient struct {
@@ -40,7 +40,7 @@ func NewDistributedTransactionsClient(cc grpc.ClientConnInterface) DistributedTr
 	return &distributedTransactionsClient{cc}
 }
 
-func (c *distributedTransactionsClient) BeginTransaction(ctx context.Context, in *BeginTxnPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) BeginTransaction(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/beginTransaction", in, out, opts...)
 	if err != nil {
@@ -49,7 +49,7 @@ func (c *distributedTransactionsClient) BeginTransaction(ctx context.Context, in
 	return out, nil
 }
 
-func (c *distributedTransactionsClient) CommitCoordinator(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) CommitCoordinator(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/commitCoordinator", in, out, opts...)
 	if err != nil {
@@ -58,7 +58,7 @@ func (c *distributedTransactionsClient) CommitCoordinator(ctx context.Context, i
 	return out, nil
 }
 
-func (c *distributedTransactionsClient) CommitPeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) CommitPeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/commitPeer", in, out, opts...)
 	if err != nil {
@@ -85,7 +85,7 @@ func (c *distributedTransactionsClient) PerformOperationPeer(ctx context.Context
 	return out, nil
 }
 
-func (c *distributedTransactionsClient) AbortCoordinator(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) AbortCoordinator(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/abortCoordinator", in, out, opts...)
 	if err != nil {
@@ -94,7 +94,7 @@ func (c *distributedTransactionsClient) AbortCoordinator(ctx context.Context, in
 	return out, nil
 }
 
-func (c *distributedTransactionsClient) AbortPeer(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) AbortPeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/abortPeer", in, out, opts...)
 	if err != nil {
@@ -103,7 +103,7 @@ func (c *distributedTransactionsClient) AbortPeer(ctx context.Context, in *Abort
 	return out, nil
 }
 
-func (c *distributedTransactionsClient) PreparePeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error) {
+func (c *distributedTransactionsClient) PreparePeer(ctx context.Context, in *TxnIdPayload, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/DistributedTransactions/preparePeer", in, out, opts...)
 	if err != nil {
@@ -116,14 +116,14 @@ func (c *distributedTransactionsClient) PreparePeer(ctx context.Context, in *Com
 // All implementations must embed UnimplementedDistributedTransactionsServer
 // for forward compatibility
 type DistributedTransactionsServer interface {
-	BeginTransaction(context.Context, *BeginTxnPayload) (*Reply, error)
-	CommitCoordinator(context.Context, *CommitPayload) (*Reply, error)
-	CommitPeer(context.Context, *CommitPayload) (*Reply, error)
+	BeginTransaction(context.Context, *TxnIdPayload) (*Reply, error)
+	CommitCoordinator(context.Context, *TxnIdPayload) (*Reply, error)
+	CommitPeer(context.Context, *TxnIdPayload) (*Reply, error)
 	PerformOperationCoordinator(context.Context, *TransactionOpPayload) (*Reply, error)
 	PerformOperationPeer(context.Context, *TransactionOpPayload) (*Reply, error)
-	AbortCoordinator(context.Context, *AbortPayload) (*Reply, error)
-	AbortPeer(context.Context, *AbortPayload) (*Reply, error)
-	PreparePeer(context.Context, *CommitPayload) (*Reply, error)
+	AbortCoordinator(context.Context, *TxnIdPayload) (*Reply, error)
+	AbortPeer(context.Context, *TxnIdPayload) (*Reply, error)
+	PreparePeer(context.Context, *TxnIdPayload) (*Reply, error)
 	mustEmbedUnimplementedDistributedTransactionsServer()
 }
 
@@ -131,13 +131,13 @@ type DistributedTransactionsServer interface {
 type UnimplementedDistributedTransactionsServer struct {
 }
 
-func (UnimplementedDistributedTransactionsServer) BeginTransaction(context.Context, *BeginTxnPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) BeginTransaction(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BeginTransaction not implemented")
 }
-func (UnimplementedDistributedTransactionsServer) CommitCoordinator(context.Context, *CommitPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) CommitCoordinator(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CommitCoordinator not implemented")
 }
-func (UnimplementedDistributedTransactionsServer) CommitPeer(context.Context, *CommitPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) CommitPeer(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CommitPeer not implemented")
 }
 func (UnimplementedDistributedTransactionsServer) PerformOperationCoordinator(context.Context, *TransactionOpPayload) (*Reply, error) {
@@ -146,13 +146,13 @@ func (UnimplementedDistributedTransactionsServer) PerformOperationCoordinator(co
 func (UnimplementedDistributedTransactionsServer) PerformOperationPeer(context.Context, *TransactionOpPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PerformOperationPeer not implemented")
 }
-func (UnimplementedDistributedTransactionsServer) AbortCoordinator(context.Context, *AbortPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) AbortCoordinator(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AbortCoordinator not implemented")
 }
-func (UnimplementedDistributedTransactionsServer) AbortPeer(context.Context, *AbortPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) AbortPeer(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AbortPeer not implemented")
 }
-func (UnimplementedDistributedTransactionsServer) PreparePeer(context.Context, *CommitPayload) (*Reply, error) {
+func (UnimplementedDistributedTransactionsServer) PreparePeer(context.Context, *TxnIdPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreparePeer not implemented")
 }
 func (UnimplementedDistributedTransactionsServer) mustEmbedUnimplementedDistributedTransactionsServer() {
@@ -170,7 +170,7 @@ func RegisterDistributedTransactionsServer(s grpc.ServiceRegistrar, srv Distribu
 }
 
 func _DistributedTransactions_BeginTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BeginTxnPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -182,13 +182,13 @@ func _DistributedTransactions_BeginTransaction_Handler(srv interface{}, ctx cont
 		FullMethod: "/DistributedTransactions/beginTransaction",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).BeginTransaction(ctx, req.(*BeginTxnPayload))
+		return srv.(DistributedTransactionsServer).BeginTransaction(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DistributedTransactions_CommitCoordinator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommitPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -200,13 +200,13 @@ func _DistributedTransactions_CommitCoordinator_Handler(srv interface{}, ctx con
 		FullMethod: "/DistributedTransactions/commitCoordinator",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).CommitCoordinator(ctx, req.(*CommitPayload))
+		return srv.(DistributedTransactionsServer).CommitCoordinator(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DistributedTransactions_CommitPeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommitPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func _DistributedTransactions_CommitPeer_Handler(srv interface{}, ctx context.Co
 		FullMethod: "/DistributedTransactions/commitPeer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).CommitPeer(ctx, req.(*CommitPayload))
+		return srv.(DistributedTransactionsServer).CommitPeer(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -260,7 +260,7 @@ func _DistributedTransactions_PerformOperationPeer_Handler(srv interface{}, ctx 
 }
 
 func _DistributedTransactions_AbortCoordinator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AbortPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -272,13 +272,13 @@ func _DistributedTransactions_AbortCoordinator_Handler(srv interface{}, ctx cont
 		FullMethod: "/DistributedTransactions/abortCoordinator",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).AbortCoordinator(ctx, req.(*AbortPayload))
+		return srv.(DistributedTransactionsServer).AbortCoordinator(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DistributedTransactions_AbortPeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AbortPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -290,13 +290,13 @@ func _DistributedTransactions_AbortPeer_Handler(srv interface{}, ctx context.Con
 		FullMethod: "/DistributedTransactions/abortPeer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).AbortPeer(ctx, req.(*AbortPayload))
+		return srv.(DistributedTransactionsServer).AbortPeer(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DistributedTransactions_PreparePeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommitPayload)
+	in := new(TxnIdPayload)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func _DistributedTransactions_PreparePeer_Handler(srv interface{}, ctx context.C
 		FullMethod: "/DistributedTransactions/preparePeer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DistributedTransactionsServer).PreparePeer(ctx, req.(*CommitPayload))
+		return srv.(DistributedTransactionsServer).PreparePeer(ctx, req.(*TxnIdPayload))
 	}
 	return interceptor(ctx, in, info, handler)
 }

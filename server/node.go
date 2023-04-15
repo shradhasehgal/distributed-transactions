@@ -69,7 +69,7 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 	return f, logger, nil
 }
 
-func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.BeginTxnPayload) (*protos.Reply, error) {
+func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	fmt.Printf("yoyo")
 	s.safeTxnIDToServerInvolved.Mu.Lock()
 	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
@@ -78,12 +78,12 @@ func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, pa
 	return &protos.Reply{Success: true}, nil
 }
 
-func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
+func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	listOfServersInvolved := GetServersInvolvedInTxn(s)
 	passing := true
 	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
-		vote := PreparePeerWrapper(peer, payload)
+		vote := PeerWrapper(peer, payload, "PreparePeer")
 		if vote != nil && vote.Success == false {
 			passing = false
 			// return &protos.Reply{Success: false}, nil
@@ -92,17 +92,22 @@ func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, p
 
 	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
-		if passing == false {
-			AbortPeerWrapper(peer, payload)
+		if !passing {
+			PeerWrapper(peer, payload, "AbortPeer")
 		} else {
-			CommitPeerWrapper(peer, payload)
+			PeerWrapper(peer, payload, "CommitPeer")
 		}
 	}
+
+	if !passing {
+		return &protos.Reply{Success: false}, nil
+	}
+
 	return &protos.Reply{Success: true}, nil
 }
 
-func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.CommitPayload) (*protos.Reply, error) {
-
+func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
+	logrusLogger.WithField("node", currNodeName).Debug("Committing transaction ID ", payload.TxnId)
 	return &protos.Reply{Success: true}, nil
 }
 
@@ -132,35 +137,52 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " itself for transaction ID ", payload.ID)
 	return &protos.Reply{Success: true}, nil
 }
-func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
+func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
+	listOfServersInvolved := GetServersInvolvedInTxn(s)
+	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId, " on servers ", *listOfServersInvolved[payload.TxnId])
+	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+		peer := utils.GetClient(&s.nodeToClient, serverName)
+		PeerWrapper(peer, payload, "AbortPeer")
+	}
 	return &protos.Reply{Success: true}, nil
 }
-func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
+func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
+	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId)
 	return &protos.Reply{Success: true}, nil
 }
 
-func PreparePeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+func PeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TxnIdPayload, rpcType string) *protos.Reply {
 	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
-	resp, err := peer.PreparePeer(ctx, payload)
+	var resp *protos.Reply
+	var err error
+
+	if rpcType == "AbortPeer" {
+		resp, err = peer.AbortPeer(ctx, payload)
+	} else if rpcType == "CommitPeer" {
+		resp, err = peer.CommitPeer(ctx, payload)
+	} else if rpcType == "PreparePeer" {
+		resp, err = peer.PreparePeer(ctx, payload)
+	}
+
 	if err != nil {
-		logrusLogger.WithField("node", currNodeName).Fatal("client.PreparePeer failed: %v", err)
+		logrusLogger.WithField("node", currNodeName).Fatal("client.%s failed: %v", rpcType, err)
 		return nil
 	}
 	return resp
 }
 
-func PreparePeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
-	resp, err := peer.PreparePeer(ctx, payload)
-	if err != nil {
-		logrusLogger.WithField("node", currNodeName).Fatal("client.PreparePeer failed: %v", err)
-		return nil
-	}
-	return resp
-}
+// func OldPeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+// 	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+// 	resp, err := peer.PreparePeer(ctx, payload)
+// 	if err != nil {
+// 		logrusLogger.WithField("node", currNodeName).Fatal("client.PreparePeer failed: %v", err)
+// 		return nil
+// 	}
+// 	return resp
+// }
 
-func (s *distributedTransactionsServer) PreparePeer(ctx context.Context, payload *protos.PreparePayload) (*protos.Reply, error) {
-
+func (s *distributedTransactionsServer) PreparePeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
+	logrusLogger.WithField("node", currNodeName).Debug("Preparing transaction ", payload.TxnId)
 	return &protos.Reply{Success: true}, nil
 }
 

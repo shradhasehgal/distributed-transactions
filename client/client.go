@@ -34,7 +34,7 @@ func pickRandomNode(nodeToClient map[string]protos.DistributedTransactionsClient
 	return chosenNode
 }
 
-func beginTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.BeginTxnPayload) *protos.Reply {
+func beginTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	resp, err := client.BeginTransaction(ctx, payload)
@@ -45,7 +45,7 @@ func beginTransaction(nodeName string, client protos.DistributedTransactionsClie
 	return resp
 }
 
-func abortTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.AbortPayload) *protos.Reply {
+func abortTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	resp, err := client.AbortCoordinator(ctx, payload)
@@ -56,7 +56,7 @@ func abortTransaction(nodeName string, client protos.DistributedTransactionsClie
 	return resp
 }
 
-func commitTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.CommitPayload) *protos.Reply {
+func commitTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	resp, err := client.CommitCoordinator(ctx, payload)
@@ -118,7 +118,7 @@ func main() {
 			logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
 			txnID++
 			coordinatorClient = nodeToClient.M[coordinator]
-			reply := beginTransaction(clientID, coordinatorClient, &protos.BeginTxnPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
 			if reply.Success {
 				fmt.Println("OK")
 			}
@@ -159,7 +159,7 @@ func main() {
 			if len(commandInfo) != 1 {
 				continue
 			}
-			reply := commitTransaction(clientID, coordinatorClient, &protos.CommitPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := commitTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
 			if reply.Success {
 				fmt.Println("COMMIT OK")
 			} else {
@@ -169,7 +169,7 @@ func main() {
 			if len(commandInfo) != 1 {
 				continue
 			}
-			reply := abortTransaction(clientID, coordinatorClient, &protos.AbortPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := abortTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
 			if reply.Success {
 				fmt.Println("ABORTED")
 			}
