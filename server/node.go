@@ -9,6 +9,7 @@ import (
 	"protos"
 	"strings"
 	"sync"
+	"time"
 	"utils"
 
 	logrus "github.com/sirupsen/logrus"
@@ -24,10 +25,15 @@ type distributedTransactionsServer struct {
 	protos.UnimplementedDistributedTransactionsServer
 	txnID                     uint64
 	safeTxnIDToServerInvolved SafeTxnIdToServersInvolvedPtr
+	nodeToClient              utils.SafeRPCClientMap
 }
 
 func newServer() *distributedTransactionsServer {
-	s := &distributedTransactionsServer{safeTxnIDToServerInvolved: SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))}}
+	s := &distributedTransactionsServer{
+		safeTxnIDToServerInvolved: SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))},
+		nodeToClient:              utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
+	}
+
 	return s
 }
 
@@ -73,16 +79,30 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 	return &protos.Reply{Success: true}, nil
 }
 
+func PerformOperationPeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := peer.PerformOperationPeer(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", currNodeName).Fatal("client.PerformOperationPeer failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
 func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
 	s.safeTxnIDToServerInvolved.Mu.RLock()
 	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
 	listOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
 	*listOfServersInvolved = append(*listOfServersInvolved, payload.Branch)
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
+	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
+	PerformOperationPeerWrapper(peer, payload)
 	return &protos.Reply{Success: true}, nil
 }
 
 func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
+	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " itself for transaction ID ", payload.ID)
 	return &protos.Reply{Success: true}, nil
 }
 func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.AbortPayload) (*protos.Reply, error) {
@@ -301,21 +321,23 @@ func main() {
 
 	utils.ParseConfigFile(config, nodeToUrl)
 	var wg sync.WaitGroup
-	nodeToClient := utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)}
 
-	s := strings.Split(nodeToUrl[currNodeName], ":")
-	listener, err := listenOnPort(s[1])
+	port := strings.Split(nodeToUrl[currNodeName], ":")[1]
+	listener, err := listenOnPort(port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for nodeName, address := range nodeToUrl {
-		wg.Add(1)
-		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &nodeToClient, logrusLogger)
-	}
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
-	protos.RegisterDistributedTransactionsServer(grpcServer, newServer())
+	s := newServer()
+	protos.RegisterDistributedTransactionsServer(grpcServer, s)
+
+	for nodeName, address := range nodeToUrl {
+		wg.Add(1)
+		go utils.EstablishConnection(currNodeName, nodeName, address, &wg, &s.nodeToClient, logrusLogger)
+	}
+
 	grpcServer.Serve(listener)
 
 	wg.Wait()

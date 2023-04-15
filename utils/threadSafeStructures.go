@@ -16,6 +16,12 @@ func SetClient(clientMap *SafeRPCClientMap, nodeName string, client protos.Distr
 	clientMap.M[nodeName] = client
 }
 
+func GetClient(clientMap *SafeRPCClientMap, nodeName string) protos.DistributedTransactionsClient {
+	defer clientMap.Mu.RUnlock()
+	clientMap.Mu.RLock()
+	return clientMap.M[nodeName]
+}
+
 // type SafeEncoderMap struct {
 // 	Mu sync.RWMutex
 // 	M  map[string]*gob.Encoder
