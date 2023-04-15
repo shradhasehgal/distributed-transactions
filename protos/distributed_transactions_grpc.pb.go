@@ -29,6 +29,7 @@ type DistributedTransactionsClient interface {
 	PerformOperationPeer(ctx context.Context, in *TransactionOpPayload, opts ...grpc.CallOption) (*Reply, error)
 	AbortCoordinator(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error)
 	AbortPeer(ctx context.Context, in *AbortPayload, opts ...grpc.CallOption) (*Reply, error)
+	PreparePeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type distributedTransactionsClient struct {
@@ -102,6 +103,15 @@ func (c *distributedTransactionsClient) AbortPeer(ctx context.Context, in *Abort
 	return out, nil
 }
 
+func (c *distributedTransactionsClient) PreparePeer(ctx context.Context, in *CommitPayload, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/DistributedTransactions/preparePeer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DistributedTransactionsServer is the server API for DistributedTransactions service.
 // All implementations must embed UnimplementedDistributedTransactionsServer
 // for forward compatibility
@@ -113,6 +123,7 @@ type DistributedTransactionsServer interface {
 	PerformOperationPeer(context.Context, *TransactionOpPayload) (*Reply, error)
 	AbortCoordinator(context.Context, *AbortPayload) (*Reply, error)
 	AbortPeer(context.Context, *AbortPayload) (*Reply, error)
+	PreparePeer(context.Context, *CommitPayload) (*Reply, error)
 	mustEmbedUnimplementedDistributedTransactionsServer()
 }
 
@@ -140,6 +151,9 @@ func (UnimplementedDistributedTransactionsServer) AbortCoordinator(context.Conte
 }
 func (UnimplementedDistributedTransactionsServer) AbortPeer(context.Context, *AbortPayload) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AbortPeer not implemented")
+}
+func (UnimplementedDistributedTransactionsServer) PreparePeer(context.Context, *CommitPayload) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PreparePeer not implemented")
 }
 func (UnimplementedDistributedTransactionsServer) mustEmbedUnimplementedDistributedTransactionsServer() {
 }
@@ -281,6 +295,24 @@ func _DistributedTransactions_AbortPeer_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DistributedTransactions_PreparePeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitPayload)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DistributedTransactionsServer).PreparePeer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/DistributedTransactions/preparePeer",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DistributedTransactionsServer).PreparePeer(ctx, req.(*CommitPayload))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DistributedTransactions_ServiceDesc is the grpc.ServiceDesc for DistributedTransactions service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -315,6 +347,10 @@ var DistributedTransactions_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "abortPeer",
 			Handler:    _DistributedTransactions_AbortPeer_Handler,
+		},
+		{
+			MethodName: "preparePeer",
+			Handler:    _DistributedTransactions_PreparePeer_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
