@@ -23,10 +23,8 @@ func EstablishConnection(currNodeName string, nodeName string, address string, w
 			logrusLogger.WithField("node", currNodeName).Debug("Error encountered while establishing TCP connection with ", address, " - ", err)
 			continue
 		}
-		defer conn.Close()
 		client := protos.NewDistributedTransactionsClient(conn)
 		SetClient(nodeToClient, nodeName, client)
-
 		break
 	}
 	logrusLogger.WithField("node", currNodeName).Debug("Connected to  ", nodeName, "->", address)

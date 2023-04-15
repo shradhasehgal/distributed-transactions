@@ -63,9 +63,9 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 }
 
 func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.BeginTxnPayload) (*protos.Reply, error) {
+	fmt.Printf("yoyo")
 	s.safeTxnIDToServerInvolved.Mu.Lock()
 	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
-	fmt.Printf("yoyo")
 	var listOfServersInvolved = []string{}
 	s.safeTxnIDToServerInvolved.M[payload.TxnId] = &listOfServersInvolved
 	return &protos.Reply{Success: true}, nil
@@ -80,7 +80,7 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 }
 
 func PerformOperationPeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	resp, err := peer.PerformOperationPeer(ctx, payload)
 	if err != nil {
