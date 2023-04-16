@@ -167,6 +167,7 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
 		if ok {
 			objectState.committedVal = objectState.tentativeWrites[timestampedConcurrencyID]
+			objectState.committedTimestamp = timestampedConcurrencyID
 			delete(objectState.tentativeWrites, timestampedConcurrencyID)
 
 		}
@@ -414,8 +415,26 @@ func PeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TxnI
 // }
 
 func (s *distributedTransactionsServer) PreparePeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
-	logrusLogger.WithField("node", currNodeName).Debug("Preparing transaction ", payload.TxnId)
-	return &protos.Reply{Success: true}, nil
+	logrusLogger.WithField("node", currNodeName).Debug("PREPARE PHASE: Validating consistency of transaction ", payload.TxnId)
+	var success bool = true
+	for _, objectState := range s.objectNameToStatePtr.M {
+		objectState.Mu.RLock()
+		s.txnIDToTimestampedConcurrencyID.Mu.RLock()
+		timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+		s.txnIDToTimestampedConcurrencyID.Mu.RUnlock()
+
+		balance, ok := objectState.tentativeWrites[timestampedConcurrencyID]
+		if ok {
+			if balance < 0 {
+				logrusLogger.WithField("node", currNodeName).Debug("Transaction ", payload.TxnId, " has a negative balance for object ", objectState.name, ". Aborting.")
+				success = false
+				break
+			}
+		}
+
+		objectState.Mu.RUnlock()
+	}
+	return &protos.Reply{Success: success}, nil
 }
 
 // func handleTxnMsg(msg *Message, received *SafeReceivedMap, nodeToEncoder *SafeEncoderMap, p *SafeMaxPriority, msgIDToLocalPriority *SafeMsgIDToLocalPriorityMap, safeIsisPq *SafePriorityQueue, msgIDToTransaction *SafeMsgIDToTransaction) {
