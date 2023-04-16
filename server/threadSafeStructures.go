@@ -19,14 +19,14 @@ type SafeObjectState struct {
 
 type SafeTxnIdToServersInvolvedPtr struct {
 	Mu sync.RWMutex
-	M  map[string]*([]string) // txn ID given by client to a pointer to list of server names involved in TXN
+	M  map[string]*(map[string]bool) // txn ID given by client to a pointer to map of server names involved in TXN
 }
 
-func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*([]string) {
+func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*(map[string]bool) {
 	s.safeTxnIDToServerInvolved.Mu.RLock()
 	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
-	listOfServersInvolved := s.safeTxnIDToServerInvolved.M
-	return listOfServersInvolved
+	mapOfServersInvolved := s.safeTxnIDToServerInvolved.M
+	return mapOfServersInvolved
 }
 
 type SafeTxnIDToChannelMap struct {

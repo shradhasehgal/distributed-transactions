@@ -65,15 +65,16 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	s.safeTxnIDToServerInvolved.Mu.Lock()
 	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
-	var listOfServersInvolved = []string{}
-	s.safeTxnIDToServerInvolved.M[payload.TxnId] = &listOfServersInvolved
+	// var listOfServersInvolved = []string{}
+	var mapOfServersInvolved = make(map[string]bool)
+	s.safeTxnIDToServerInvolved.M[payload.TxnId] = &mapOfServersInvolved
 	return &protos.Reply{Success: true}, nil
 }
 
 func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
-	listOfServersInvolved := GetServersInvolvedInTxn(s)
+	mapOfServersInvolved := GetServersInvolvedInTxn(s)
 	passing := true
-	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
 		vote := PeerWrapper(peer, payload, "PreparePeer")
 		if vote != nil && vote.Success == false {
@@ -82,7 +83,7 @@ func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, p
 		}
 	}
 
-	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
 		if !passing {
 			PeerWrapper(peer, payload, "AbortPeer")
@@ -117,8 +118,9 @@ func PerformOperationPeerWrapper(peer protos.DistributedTransactionsClient, payl
 func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
 	s.safeTxnIDToServerInvolved.Mu.RLock()
 	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
-	listOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
-	*listOfServersInvolved = append(*listOfServersInvolved, payload.Branch)
+	mapOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
+	// *mapOfServersInvolved = append(*listOfServersInvolved, payload.Branch)
+	(*mapOfServersInvolved)[payload.Branch] = true
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
 	resp := PerformOperationPeerWrapper(peer, payload)
@@ -245,9 +247,9 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	return &protos.Reply{Success: success, Value: readValue}, nil
 }
 func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
-	listOfServersInvolved := GetServersInvolvedInTxn(s)
-	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId, " on servers ", *listOfServersInvolved[payload.TxnId])
-	for _, serverName := range *listOfServersInvolved[payload.TxnId] {
+	mapOfServersInvolved := GetServersInvolvedInTxn(s)
+	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId, " on servers ", *mapOfServersInvolved[payload.TxnId])
+	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
 		PeerWrapper(peer, payload, "AbortPeer")
 	}
