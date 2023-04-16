@@ -73,24 +73,56 @@ func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, pa
 	return &protos.Reply{Success: true}, nil
 }
 
+func PreparePeerGoRoutine(peer protos.DistributedTransactionsClient, payload *protos.TxnIdPayload, prepareChannel chan bool) {
+	vote := PeerWrapper(peer, payload, "PreparePeer")
+	if vote == nil || vote.Success == false {
+		prepareChannel <- false
+	}
+	prepareChannel <- true
+}
+
+func CommitGoRoutine(peer protos.DistributedTransactionsClient, payload *protos.TxnIdPayload, commitChannel chan bool, passing bool) {
+	if !passing {
+		PeerWrapper(peer, payload, "AbortPeer")
+	} else {
+		PeerWrapper(peer, payload, "CommitPeer")
+	}
+	commitChannel <- true
+}
+
 func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	mapOfServersInvolved := GetServersInvolvedInTxn(s)
-	passing := true
+
+	prepareChannel := make(chan bool, len(*mapOfServersInvolved[payload.TxnId]))
 	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
-		vote := PeerWrapper(peer, payload, "PreparePeer")
-		if vote != nil && vote.Success == false {
+		go PreparePeerGoRoutine(peer, payload, prepareChannel)
+	}
+
+	countSeversInvolved := 0
+	passing := true
+	for {
+		resp := <-prepareChannel
+		if !resp {
 			passing = false
-			// return &protos.Reply{Success: false}, nil
+		}
+		countSeversInvolved++
+		if countSeversInvolved == len(*mapOfServersInvolved[payload.TxnId]) {
+			break
 		}
 	}
 
+	commitChannel := make(chan bool, len(*mapOfServersInvolved[payload.TxnId]))
 	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
-		if !passing {
-			PeerWrapper(peer, payload, "AbortPeer")
-		} else {
-			PeerWrapper(peer, payload, "CommitPeer")
+		go CommitGoRoutine(peer, payload, commitChannel, passing)
+	}
+
+	for {
+		<-commitChannel
+		countSeversInvolved--
+		if countSeversInvolved == 0 {
+			break
 		}
 	}
 
@@ -126,6 +158,22 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 
 	// commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
 	// commitChan <- true
+	for _, objectState := range s.objectNameToStatePtr.M {
+		objectState.Mu.Lock()
+		s.txnIDToTimestampedConcurrencyID.Mu.RLock()
+		timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+		s.txnIDToTimestampedConcurrencyID.Mu.RUnlock()
+
+		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
+		if ok {
+			objectState.committedVal = objectState.tentativeWrites[timestampedConcurrencyID]
+			delete(objectState.tentativeWrites, timestampedConcurrencyID)
+
+		}
+
+		objectState.Mu.Unlock()
+	}
+
 	transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
 	transactionState.Mu.Lock()
 	transactionState.state = Committed
@@ -276,7 +324,10 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	res, timestampedConcurrencyID = GetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID)
 	if !res {
 		timestampedConcurrencyID = SetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID, &s.timestampedConcurrencyID)
-		CreateTxnChannel(&s.txnIDToChannel, timestampedConcurrencyID)
+		s.timestampedConcurrencyIDToState.Mu.Lock()
+		s.timestampedConcurrencyIDToState.M[timestampedConcurrencyID] = &SafeTransactionState{state: In_Progress}
+		s.timestampedConcurrencyIDToState.Mu.Unlock()
+		// CreateTxnChannel(&s.txnIDToChannel, timestampedConcurrencyID)
 	}
 	logrusLogger.WithField("node", currNodeName).Debug("Timestamped Concurrency ID for transaction ID ", payload.ID, " is ", timestampedConcurrencyID)
 
@@ -319,7 +370,7 @@ func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *
 
 		_, okie := objectState.readTimestamps[timestampedConcurrencyID]
 		if okie {
-			delete(objectState.tentativeWrites, timestampedConcurrencyID)
+			delete(objectState.readTimestamps, timestampedConcurrencyID)
 		}
 
 		objectState.Mu.Unlock()
