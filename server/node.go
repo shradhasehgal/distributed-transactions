@@ -29,7 +29,7 @@ type distributedTransactionsServer struct {
 func newServer() *distributedTransactionsServer {
 	s := &distributedTransactionsServer{
 		nodeToClient:                    utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
-		safeTxnIDToServerInvolved:       SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))},
+		safeTxnIDToServerInvolved:       SafeTxnIdToServersInvolvedPtr{M: make(map[string]*(map[string]bool))},
 		txnIDToTimestampedConcurrencyID: SafeTxnIDToTimestampedConcurrencyID{M: make(map[string]uint32)},
 		timestampedConcurrencyID:        0,
 		objectNameToStatePtr:            SafeObjectNameToStatePtr{M: make(map[string]*SafeObjectState)},
