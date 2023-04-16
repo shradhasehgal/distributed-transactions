@@ -14,7 +14,6 @@ type SafeObjectState struct {
 	tentativeWrites    map[uint32]int32
 	committedVal       int32
 	committedTimestamp uint32
-	maxReadTimestamp   uint32
 	name               string
 }
 

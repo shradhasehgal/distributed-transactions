@@ -121,8 +121,14 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 	*listOfServersInvolved = append(*listOfServersInvolved, payload.Branch)
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
-	PerformOperationPeerWrapper(peer, payload)
-	return &protos.Reply{Success: true}, nil
+	resp := PerformOperationPeerWrapper(peer, payload)
+	var success bool
+	if resp != nil && resp.Success {
+		success = true
+	} else {
+		success = false
+	}
+	return &protos.Reply{Success: success}, nil
 }
 
 func handleBalanceAlterCommand(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID uint32) bool {
@@ -136,14 +142,19 @@ func handleBalanceAlterCommand(s *distributedTransactionsServer, payload *protos
 		if strings.ToLower(payload.Operation) == "withdraw" {
 			multiplier = -1
 		}
-		if timestampedConcurrencyID >= objectState.maxReadTimestamp && timestampedConcurrencyID > objectState.committedTimestamp {
+		var maxReadTimestamp uint32 = 0
+		for ts := range objectState.readTimestamps {
+			maxReadTimestamp = uint32(math.Max(float64(ts), float64(maxReadTimestamp)))
+		}
+		if timestampedConcurrencyID >= maxReadTimestamp && timestampedConcurrencyID > objectState.committedTimestamp {
 			if _, ok := objectState.tentativeWrites[timestampedConcurrencyID]; !ok {
 				objectState.tentativeWrites[timestampedConcurrencyID] = 0
 			}
-			logrusLogger.WithField("node", currNodeName).Debug("Performing ", payload.Operation, " in transaction ID ", payload.ID, " on account ", objectState.name, ". Previous balance in tentative write list: ", readResult)
+			logrusLogger.WithField("node", currNodeName).Debug("Performing ", payload.Operation, " in transaction ID ", payload.ID, " on account ", objectState.name, ". Previous balance in tentative write list: ", readValue, ". Amount in payload: ", payload.Amount)
 
 			objectState.tentativeWrites[timestampedConcurrencyID] = (readValue + (multiplier * payload.Amount))
 			logrusLogger.WithField("node", currNodeName).Debug("Performing ", payload.Operation, " in transaction ID ", payload.ID, " on account ", objectState.name, ". Current balance in tentative write list: ", objectState.tentativeWrites[timestampedConcurrencyID])
+			success = true
 		} else {
 			// Abort transaction
 			success = false
@@ -170,14 +181,11 @@ func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpP
 			if maxTs == objectState.committedTimestamp {
 				logrusLogger.WithField("node", currNodeName).Debug("Performing read in transaction ID ", payload.ID, " on account ", objectState.name, " using committed ts: ", maxTs, " value: ", val)
 				objectState.readTimestamps[timestampedConcurrencyID] = true
-				objectState.maxReadTimestamp = uint32(math.Max(float64(timestampedConcurrencyID), float64(objectState.maxReadTimestamp)))
-				objectState.Mu.Unlock()
 				success = true
 				readBalance = val
 				break
 			} else if maxTs == timestampedConcurrencyID {
 				logrusLogger.WithField("node", currNodeName).Debug("Performing read in transaction ID ", payload.ID, " on account ", objectState.name, " using uncommitted ts: ", maxTs, " value: ", val)
-				objectState.Mu.Unlock()
 				success = true
 				readBalance = val
 				break
@@ -207,6 +215,7 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	txnID := payload.ID
 	objectName := payload.Account
 	var success bool
+	var readValue int32
 	var objectState *SafeObjectState
 	objectState = GetObjectState(&s.objectNameToStatePtr, objectName)
 	if objectState == nil {
@@ -230,10 +239,10 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	if strings.ToLower(payload.Operation) == "deposit" || strings.ToLower(payload.Operation) == "withdraw" {
 		success = handleBalanceAlterCommand(s, payload, objectState, timestampedConcurrencyID)
 	} else if strings.ToLower(payload.Operation) == "balance" {
-		success, _ = handleRead(s, payload, objectState, timestampedConcurrencyID)
+		success, readValue = handleRead(s, payload, objectState, timestampedConcurrencyID)
 	}
 
-	return &protos.Reply{Success: success}, nil
+	return &protos.Reply{Success: success, Value: readValue}, nil
 }
 func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	listOfServersInvolved := GetServersInvolvedInTxn(s)

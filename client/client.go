@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"protos"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,7 +128,9 @@ func main() {
 				continue
 			}
 			destinationDetails := strings.Split(commandInfo[1], ".")
-			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "DEPOSIT", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			amount, _ := strconv.ParseInt(commandInfo[2], 10, 32)
+
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "DEPOSIT", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
 			if reply.Success {
 				fmt.Println("OK")
 			} else {
@@ -138,7 +141,9 @@ func main() {
 				continue
 			}
 			destinationDetails := strings.Split(commandInfo[1], ".")
-			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "WITHDRAW", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			amount, _ := strconv.ParseInt(commandInfo[2], 10, 32)
+
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "WITHDRAW", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
 			if reply.Success {
 				fmt.Println("OK")
 			} else {
@@ -151,7 +156,7 @@ func main() {
 			destinationDetails := strings.Split(commandInfo[1], ".")
 			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "BALANCE", Account: destinationDetails[1], Branch: destinationDetails[0]})
 			if reply.Success {
-				fmt.Println("OK")
+				fmt.Printf("%s = %d", commandInfo[1], reply.Value)
 			} else {
 				fmt.Println("ABORTED")
 			}
