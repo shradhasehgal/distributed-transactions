@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"protos"
@@ -16,31 +16,24 @@ import (
 	"google.golang.org/grpc"
 )
 
-type SafeTxnIdToServersInvolvedPtr struct {
-	Mu sync.RWMutex
-	M  map[string]*([]string) // txn ID given by client to a pointer to list of server names involved in TXN
-}
-
-func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*([]string) {
-	s.safeTxnIDToServerInvolved.Mu.RLock()
-	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
-	listOfServersInvolved := s.safeTxnIDToServerInvolved.M
-	return listOfServersInvolved
-}
-
 type distributedTransactionsServer struct {
 	protos.UnimplementedDistributedTransactionsServer
-	txnID                     uint64
-	safeTxnIDToServerInvolved SafeTxnIdToServersInvolvedPtr
-	nodeToClient              utils.SafeRPCClientMap
+	timestampedConcurrencyID        uint32
+	nodeToClient                    utils.SafeRPCClientMap
+	safeTxnIDToServerInvolved       SafeTxnIdToServersInvolvedPtr
+	txnIDToTimestampedConcurrencyID SafeTxnIDToTimestampedConcurrencyID
+	objectNameToStatePtr            SafeObjectNameToStatePtr
+	txnIDToChannel                  SafeTxnIDToChannelMap
 }
 
 func newServer() *distributedTransactionsServer {
 	s := &distributedTransactionsServer{
-		safeTxnIDToServerInvolved: SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))},
-		nodeToClient:              utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
-	}
-
+		nodeToClient:                    utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
+		safeTxnIDToServerInvolved:       SafeTxnIdToServersInvolvedPtr{M: make(map[string]*([]string))},
+		txnIDToTimestampedConcurrencyID: SafeTxnIDToTimestampedConcurrencyID{M: make(map[string]uint32)},
+		timestampedConcurrencyID:        0,
+		objectNameToStatePtr:            SafeObjectNameToStatePtr{M: make(map[string]*SafeObjectState)},
+		txnIDToChannel:                  SafeTxnIDToChannelMap{M: make(map[uint32]chan bool)}}
 	return s
 }
 
@@ -70,7 +63,6 @@ func getLogger(nodeName string, logType string) (*os.File, *log.Logger, error) {
 }
 
 func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
-	fmt.Printf("yoyo")
 	s.safeTxnIDToServerInvolved.Mu.Lock()
 	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
 	var listOfServersInvolved = []string{}
@@ -133,9 +125,115 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 	return &protos.Reply{Success: true}, nil
 }
 
+func handleBalanceAlterCommand(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID uint32) bool {
+	var success bool
+	readResult, readValue := handleRead(s, payload, objectState, timestampedConcurrencyID)
+	if !readResult {
+		success = false
+	} else {
+		objectState.Mu.Lock()
+		var multiplier int32 = 1
+		if strings.ToLower(payload.Operation) == "withdraw" {
+			multiplier = -1
+		}
+		if timestampedConcurrencyID >= objectState.maxReadTimestamp && timestampedConcurrencyID > objectState.committedTimestamp {
+			if _, ok := objectState.tentativeWrites[timestampedConcurrencyID]; !ok {
+				objectState.tentativeWrites[timestampedConcurrencyID] = 0
+			}
+			logrusLogger.WithField("node", currNodeName).Debug("Performing ", payload.Operation, " in transaction ID ", payload.ID, " on account ", objectState.name, ". Previous balance in tentative write list: ", readResult)
+
+			objectState.tentativeWrites[timestampedConcurrencyID] = (readValue + (multiplier * payload.Amount))
+			logrusLogger.WithField("node", currNodeName).Debug("Performing ", payload.Operation, " in transaction ID ", payload.ID, " on account ", objectState.name, ". Current balance in tentative write list: ", objectState.tentativeWrites[timestampedConcurrencyID])
+		} else {
+			// Abort transaction
+			success = false
+		}
+		objectState.Mu.Unlock()
+	}
+	return success
+}
+
+func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID uint32) (bool, int32) {
+	var success bool
+	var readBalance int32
+	for {
+		objectState.Mu.Lock()
+		if timestampedConcurrencyID > objectState.committedTimestamp {
+			var maxTs uint32 = objectState.committedTimestamp
+			var val int32 = objectState.committedVal
+			for timestamp, balance := range objectState.tentativeWrites {
+				if timestamp <= timestampedConcurrencyID {
+					maxTs = uint32(math.Max(float64(maxTs), float64(timestamp)))
+					val = balance
+				}
+			}
+			if maxTs == objectState.committedTimestamp {
+				logrusLogger.WithField("node", currNodeName).Debug("Performing read in transaction ID ", payload.ID, " on account ", objectState.name, " using committed ts: ", maxTs, " value: ", val)
+				objectState.readTimestamps[timestampedConcurrencyID] = true
+				objectState.maxReadTimestamp = uint32(math.Max(float64(timestampedConcurrencyID), float64(objectState.maxReadTimestamp)))
+				objectState.Mu.Unlock()
+				success = true
+				readBalance = val
+				break
+			} else if maxTs == timestampedConcurrencyID {
+				logrusLogger.WithField("node", currNodeName).Debug("Performing read in transaction ID ", payload.ID, " on account ", objectState.name, " using uncommitted ts: ", maxTs, " value: ", val)
+				objectState.Mu.Unlock()
+				success = true
+				readBalance = val
+				break
+			} else {
+				var waitChan chan bool = s.txnIDToChannel.M[maxTs]
+				objectState.Mu.Unlock()
+				res := <-waitChan
+				if res {
+					logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", maxTs, " that ", timestampedConcurrencyID, " was waiting on has been: COMMITTED!")
+				} else {
+					logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", maxTs, " that ", timestampedConcurrencyID, " was waiting on has been: ABORTED!")
+				}
+
+			}
+		} else {
+			success = false
+			// Abort transaction
+			break
+		}
+	}
+	objectState.Mu.Unlock()
+	return success, readBalance
+}
+
 func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " itself for transaction ID ", payload.ID)
-	return &protos.Reply{Success: true}, nil
+	txnID := payload.ID
+	objectName := payload.Account
+	var success bool
+	var objectState *SafeObjectState
+	objectState = GetObjectState(&s.objectNameToStatePtr, objectName)
+	if objectState == nil {
+		if strings.ToLower(payload.Operation) == "balance" || strings.ToLower(payload.Operation) == "withdraw" {
+			logrusLogger.WithField("node", currNodeName).Debug("Can't perform ", strings.ToLower(payload.Operation), " in transaction ID ", payload.ID, " on account ", objectName, ". Aborting because account doesn't exist!")
+			// Abort transaction
+			return &protos.Reply{Success: false}, nil
+		}
+		objectState = &SafeObjectState{name: objectName, readTimestamps: make(map[uint32]bool), tentativeWrites: make(map[uint32]int32), committedTimestamp: 0}
+		SetObjectState(&s.objectNameToStatePtr, objectName, objectState)
+	}
+	var timestampedConcurrencyID uint32
+	var res bool
+	res, timestampedConcurrencyID = GetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID)
+	if !res {
+		timestampedConcurrencyID = SetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID, &s.timestampedConcurrencyID)
+		CreateTxnChannel(&s.txnIDToChannel, timestampedConcurrencyID)
+	}
+	logrusLogger.WithField("node", currNodeName).Debug("Timestamped Concurrency ID for transaction ID ", payload.ID, " is ", timestampedConcurrencyID)
+
+	if strings.ToLower(payload.Operation) == "deposit" || strings.ToLower(payload.Operation) == "withdraw" {
+		success = handleBalanceAlterCommand(s, payload, objectState, timestampedConcurrencyID)
+	} else if strings.ToLower(payload.Operation) == "balance" {
+		success, _ = handleRead(s, payload, objectState, timestampedConcurrencyID)
+	}
+
+	return &protos.Reply{Success: success}, nil
 }
 func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	listOfServersInvolved := GetServersInvolvedInTxn(s)
