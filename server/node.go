@@ -246,6 +246,26 @@ func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, pa
 }
 func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId)
+	s.objectNameToStatePtr.Mu.RLock()
+	defer s.objectNameToStatePtr.Mu.RLock()
+	for _, objectState := range s.objectNameToStatePtr.M {
+		objectState.Mu.Lock()
+		s.txnIDToTimestampedConcurrencyID.Mu.RLock()
+		timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+		s.txnIDToTimestampedConcurrencyID.Mu.RUnlock()
+
+		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
+		if ok {
+			delete(objectState.tentativeWrites, timestampedConcurrencyID)
+		}
+
+		_, okie := objectState.readTimestamps[timestampedConcurrencyID]
+		if okie {
+			delete(objectState.tentativeWrites, timestampedConcurrencyID)
+		}
+
+		objectState.Mu.Unlock()
+	}
 	return &protos.Reply{Success: true}, nil
 }
 
