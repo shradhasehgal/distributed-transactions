@@ -4,6 +4,42 @@ import (
 	"sync"
 )
 
+type TransactionState int64
+
+const (
+	Committed TransactionState = iota
+	Aborted
+	In_Progress
+)
+
+func (s TransactionState) String() string {
+	switch s {
+	case Committed:
+		return "COMMITTED"
+	case Aborted:
+		return "ABORTED"
+	case In_Progress:
+		return "IN PROGRESS"
+	}
+	return "unknown"
+}
+
+type SafeTransactionState struct {
+	Mu    sync.RWMutex
+	state TransactionState
+}
+
+type SafeTimestampedConcurrencyIDToStatePtr struct {
+	Mu sync.RWMutex
+	M  map[uint32]*SafeTransactionState
+}
+
+func GetTransactionState(timestampedConcurrencyIDToStatePtr *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID uint32) *SafeTransactionState {
+	defer timestampedConcurrencyIDToStatePtr.Mu.RUnlock()
+	timestampedConcurrencyIDToStatePtr.Mu.RLock()
+	return timestampedConcurrencyIDToStatePtr.M[timestampedConcurrencyID]
+}
+
 type TimestampVal struct {
 	value     int32
 	timestamp uint32

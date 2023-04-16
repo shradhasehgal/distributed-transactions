@@ -24,6 +24,7 @@ type distributedTransactionsServer struct {
 	txnIDToTimestampedConcurrencyID SafeTxnIDToTimestampedConcurrencyID
 	objectNameToStatePtr            SafeObjectNameToStatePtr
 	txnIDToChannel                  SafeTxnIDToChannelMap
+	timestampedConcurrencyIDToState SafeTimestampedConcurrencyIDToStatePtr
 }
 
 func newServer() *distributedTransactionsServer {
@@ -33,7 +34,8 @@ func newServer() *distributedTransactionsServer {
 		txnIDToTimestampedConcurrencyID: SafeTxnIDToTimestampedConcurrencyID{M: make(map[string]uint32)},
 		timestampedConcurrencyID:        0,
 		objectNameToStatePtr:            SafeObjectNameToStatePtr{M: make(map[string]*SafeObjectState)},
-		txnIDToChannel:                  SafeTxnIDToChannelMap{M: make(map[uint32]chan bool)}}
+		txnIDToChannel:                  SafeTxnIDToChannelMap{M: make(map[uint32]chan bool)},
+		timestampedConcurrencyIDToState: SafeTimestampedConcurrencyIDToStatePtr{M: make(map[uint32]*SafeTransactionState)}}
 	return s
 }
 
@@ -102,8 +104,33 @@ func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, p
 func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Committing transaction ID ", payload.TxnId)
 	timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
-	commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
-	commitChan <- true
+	waitingOn := timestampedConcurrencyID - 1
+	for waitingOn != 0 {
+		transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, waitingOn)
+		var state TransactionState
+		state = transactionState.state
+		for state == In_Progress {
+			transactionState.Mu.RLock()
+			state = transactionState.state
+			logrusLogger.WithField("node", currNodeName).Debug("Waiting for state of txn ID ", waitingOn, " to not be ", In_Progress, ". Current state: ", state)
+			transactionState.Mu.RUnlock()
+			// Sleep to allow commit of that transaction
+			time.Sleep(500 * time.Millisecond)
+		}
+		logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", waitingOn, " that ", timestampedConcurrencyID, " was waiting on has been ", state, "!")
+		if state == Committed {
+			break
+		}
+		waitingOn--
+	}
+
+	// commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
+	// commitChan <- true
+	transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
+	transactionState.Mu.Lock()
+	transactionState.state = Committed
+	transactionState.Mu.Unlock()
+
 	return &protos.Reply{Success: true}, nil
 }
 
@@ -201,16 +228,21 @@ func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpP
 				readBalance = val
 				break
 			} else {
-				var waitChan chan bool = s.txnIDToChannel.M[maxTs]
+				// var waitChan chan bool = s.txnIDToChannel.M[maxTs]
+
 				logrusLogger.WithField("node", currNodeName).Debug("Can't perform read in transaction ID ", payload.ID, " on account ", objectState.name, " yet! Will wait for commit/abort of: ", maxTs)
 				objectState.Mu.Unlock()
-				res := <-waitChan
-				if res {
-					logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", maxTs, " that ", timestampedConcurrencyID, " was waiting on has been: COMMITTED!")
-				} else {
-					logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", maxTs, " that ", timestampedConcurrencyID, " was waiting on has been: ABORTED!")
+				// res := <-waitChan
+				transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, maxTs)
+				var state TransactionState = In_Progress
+				for state == In_Progress {
+					transactionState.Mu.RLock()
+					state = transactionState.state
+					logrusLogger.WithField("node", currNodeName).Debug("Waiting for state of txn ID ", maxTs, " to not be ", In_Progress, ". Current state: ", state)
+					transactionState.Mu.RUnlock()
+					time.Sleep(500 * time.Millisecond)
 				}
-
+				logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", maxTs, " that ", timestampedConcurrencyID, " was waiting on has been ", state, "!")
 			}
 		} else {
 			success = false
@@ -269,8 +301,8 @@ func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *
 	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId)
 
 	timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
-	commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
-	commitChan <- true
+	// commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
+	// commitChan <- true
 
 	s.objectNameToStatePtr.Mu.RLock()
 	defer s.objectNameToStatePtr.Mu.RLock()
@@ -292,6 +324,11 @@ func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *
 
 		objectState.Mu.Unlock()
 	}
+	transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
+	transactionState.Mu.Lock()
+	transactionState.state = Aborted
+	transactionState.Mu.Unlock()
+
 	return &protos.Reply{Success: true}, nil
 }
 
