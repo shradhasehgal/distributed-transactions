@@ -37,7 +37,7 @@ type SafeTxnIDToChannelMap struct {
 func CreateTxnChannel(timestampedConcurrencyIDToChannel *SafeTxnIDToChannelMap, timestampedConcurrencyID uint32) {
 	defer timestampedConcurrencyIDToChannel.Mu.Unlock()
 	timestampedConcurrencyIDToChannel.Mu.Lock()
-	txnChannel := make(chan bool)
+	txnChannel := make(chan bool, 1)
 	timestampedConcurrencyIDToChannel.M[timestampedConcurrencyID] = txnChannel
 }
 

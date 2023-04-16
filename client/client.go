@@ -69,7 +69,7 @@ func commitTransaction(nodeName string, client protos.DistributedTransactionsCli
 }
 
 func performOp(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	resp, err := client.PerformOperationCoordinator(ctx, payload)
 	if err != nil {
@@ -156,7 +156,7 @@ func main() {
 			destinationDetails := strings.Split(commandInfo[1], ".")
 			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "BALANCE", Account: destinationDetails[1], Branch: destinationDetails[0]})
 			if reply.Success {
-				fmt.Printf("%s = %d", commandInfo[1], reply.Value)
+				fmt.Printf("%s = %d\n", commandInfo[1], reply.Value)
 			} else {
 				fmt.Println("ABORTED")
 			}

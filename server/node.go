@@ -101,11 +101,14 @@ func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, p
 
 func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Committing transaction ID ", payload.TxnId)
+	timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+	commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
+	commitChan <- true
 	return &protos.Reply{Success: true}, nil
 }
 
 func PerformOperationPeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	resp, err := peer.PerformOperationPeer(ctx, payload)
 	if err != nil {
@@ -123,14 +126,20 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 	(*mapOfServersInvolved)[payload.Branch] = true
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
+	if peer == nil {
+		return &protos.Reply{Success: false, Value: 0}, nil
+	}
 	resp := PerformOperationPeerWrapper(peer, payload)
 	var success bool
+	var value int32
 	if resp != nil && resp.Success {
 		success = true
+		value = resp.Value
 	} else {
 		success = false
+		value = 0
 	}
-	return &protos.Reply{Success: success}, nil
+	return &protos.Reply{Success: success, Value: value}, nil
 }
 
 func handleBalanceAlterCommand(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID uint32) bool {
@@ -193,6 +202,7 @@ func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpP
 				break
 			} else {
 				var waitChan chan bool = s.txnIDToChannel.M[maxTs]
+				logrusLogger.WithField("node", currNodeName).Debug("Can't perform read in transaction ID ", payload.ID, " on account ", objectState.name, " yet! Will wait for commit/abort of: ", maxTs)
 				objectState.Mu.Unlock()
 				res := <-waitChan
 				if res {
@@ -257,6 +267,11 @@ func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, pa
 }
 func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId)
+
+	timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+	commitChan := s.txnIDToChannel.M[timestampedConcurrencyID]
+	commitChan <- true
+
 	s.objectNameToStatePtr.Mu.RLock()
 	defer s.objectNameToStatePtr.Mu.RLock()
 	for _, objectState := range s.objectNameToStatePtr.M {
