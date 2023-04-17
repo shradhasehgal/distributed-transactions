@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"protos"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -140,6 +141,58 @@ func (s *distributedTransactionsServer) CommitCoordinator(ctx context.Context, p
 func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	logrusLogger.WithField("node", currNodeName).Debug("Committing transaction ID ", payload.TxnId)
 	timestampedConcurrencyID := s.txnIDToTimestampedConcurrencyID.M[payload.TxnId]
+
+	objectsInvolvedPtr := GetSafeTimestampedConcurrencyIDToObjectsInvolved(&s.timestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID)
+	for objectName, _ := range (*objectsInvolvedPtr).M {
+
+		var waitingOnTxnID uint32 = 0
+
+		for {
+			objectState := GetObjectState(&s.objectNameToStatePtr, objectName)
+			objectState.Mu.RLock()
+			keys := make([]uint32, 0, len(objectState.tentativeWrites))
+
+			for k := range objectState.tentativeWrites {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+			for idx, val := range keys {
+				if timestampedConcurrencyID == val {
+					if idx != 0 {
+						waitingOnTxnID = keys[idx-1]
+						objectState.Mu.RUnlock()
+					}
+
+				}
+			}
+
+			if waitingOnTxnID != 0 {
+				logrusLogger.WithField("node", currNodeName).Debug("Waiting on txn ID ", waitingOnTxnID, " to commit before committing txn ID ", timestampedConcurrencyID)
+				transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, waitingOnTxnID)
+				var state TransactionState
+				state = In_Progress
+				for state == In_Progress {
+					transactionState.Mu.RLock()
+					state = transactionState.state
+					logrusLogger.WithField("node", currNodeName).Debug("Waiting for state of txn ID ", waitingOnTxnID, " to not be ", In_Progress, ". Current state: ", state)
+					transactionState.Mu.RUnlock()
+					// Sleep to allow commit of that transaction
+					time.Sleep(500 * time.Millisecond)
+				}
+
+				logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", waitingOnTxnID, " that ", timestampedConcurrencyID, " was waiting on has been ", state, "!")
+				if state == Committed {
+					logrusLogger.WithField("node", currNodeName).Debug("The transaction ID ", waitingOnTxnID, " that ", timestampedConcurrencyID, " was waiting on has been ", state, "! Moving on to next object")
+					break
+				}
+			} else {
+				logrusLogger.WithField("node", currNodeName).Debug("No need to wait on any other transactions to commit for objectName %s before committing txn ID ", objectName, timestampedConcurrencyID)
+				break
+			}
+		}
+
+	}
 	waitingOn := timestampedConcurrencyID - 1
 	for waitingOn != 0 {
 		transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, waitingOn)

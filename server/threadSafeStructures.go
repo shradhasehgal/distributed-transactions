@@ -80,6 +80,12 @@ func InitSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurr
 	s.M[timestampedConcurrencyID] = &SafeObjectsSet{M: make(map[string]bool)}
 }
 
+func GetSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32) *SafeObjectsSet {
+	defer s.Mu.RUnlock()
+	s.Mu.RLock()
+	return s.M[timestampedConcurrencyID]
+}
+
 func AddObjectToTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32, objectName string) {
 	s.Mu.RLock()
 	objectsInvolved := s.M[timestampedConcurrencyID]
