@@ -18,27 +18,31 @@ import (
 
 type distributedTransactionsServer struct {
 	protos.UnimplementedDistributedTransactionsServer
-	timestampedConcurrencyID        uint32
-	nodeToClient                    utils.SafeRPCClientMap
-	safeTxnIDToServerInvolved       SafeTxnIdToServersInvolvedPtr
-	txnIDToTimestampedConcurrencyID SafeTxnIDToTimestampedConcurrencyID
-	objectNameToStatePtr            SafeObjectNameToStatePtr
-	txnIDToChannel                  SafeTxnIDToChannelMap
-	timestampedConcurrencyIDToState SafeTimestampedConcurrencyIDToStatePtr
+	timestampedConcurrencyID                  uint32
+	nodeToClient                              utils.SafeRPCClientMap
+	safeTxnIDToServerInvolved                 SafeTxnIdToServersInvolvedPtr
+	txnIDToTimestampedConcurrencyID           SafeTxnIDToTimestampedConcurrencyID
+	objectNameToStatePtr                      SafeObjectNameToStatePtr
+	txnIDToChannel                            SafeTxnIDToChannelMap
+	timestampedConcurrencyIDToState           SafeTimestampedConcurrencyIDToStatePtr
+	timestampedConcurrencyIDToObjectsInvolved SafeTimestampedConcurrencyIDToObjectsInvolved
 }
 
 func newServer() *distributedTransactionsServer {
 	s := &distributedTransactionsServer{
-		nodeToClient:                    utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
-		safeTxnIDToServerInvolved:       SafeTxnIdToServersInvolvedPtr{M: make(map[string]*(map[string]bool))},
-		txnIDToTimestampedConcurrencyID: SafeTxnIDToTimestampedConcurrencyID{M: make(map[string]uint32)},
-		timestampedConcurrencyID:        0,
-		objectNameToStatePtr:            SafeObjectNameToStatePtr{M: make(map[string]*SafeObjectState)},
-		txnIDToChannel:                  SafeTxnIDToChannelMap{M: make(map[uint32]chan bool)},
-		timestampedConcurrencyIDToState: SafeTimestampedConcurrencyIDToStatePtr{M: make(map[uint32]*SafeTransactionState)}}
+		nodeToClient:                              utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)},
+		safeTxnIDToServerInvolved:                 SafeTxnIdToServersInvolvedPtr{M: make(map[string]*(map[string]bool))},
+		txnIDToTimestampedConcurrencyID:           SafeTxnIDToTimestampedConcurrencyID{M: make(map[string]uint32)},
+		timestampedConcurrencyID:                  0,
+		objectNameToStatePtr:                      SafeObjectNameToStatePtr{M: make(map[string]*SafeObjectState)},
+		txnIDToChannel:                            SafeTxnIDToChannelMap{M: make(map[uint32]chan bool)},
+		timestampedConcurrencyIDToState:           SafeTimestampedConcurrencyIDToStatePtr{M: make(map[uint32]*SafeTransactionState)},
+		timestampedConcurrencyIDToObjectsInvolved: SafeTimestampedConcurrencyIDToObjectsInvolved{M: make(map[uint32]*(map[string]bool))},
+	}
 	return s
 }
 
+var timeoutVal = 24 * time.Hour
 var currNodeName string
 
 var logrusLogger = logrus.New()
@@ -75,7 +79,7 @@ func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, pa
 
 func PreparePeerGoRoutine(peer protos.DistributedTransactionsClient, payload *protos.TxnIdPayload, prepareChannel chan bool) {
 	vote := PeerWrapper(peer, payload, "PreparePeer")
-	if vote == nil || vote.Success == false {
+	if vote == nil || !vote.Success {
 		prepareChannel <- false
 	}
 	prepareChannel <- true
@@ -184,11 +188,22 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 }
 
 func PerformOperationPeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
 	defer cancel()
 	resp, err := peer.PerformOperationPeer(ctx, payload)
 	if err != nil {
 		logrusLogger.WithField("node", currNodeName).Fatal("client.PerformOperationPeer failed: %v", err)
+		return nil
+	}
+	return resp
+}
+
+func PerformAbortCoordinatorWrapper(coordinator protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
+	defer cancel()
+	resp, err := coordinator.AbortCoordinator(ctx, payload)
+	if err != nil {
+		logrusLogger.WithField("node", currNodeName).Fatal("client.AbortCoordinator failed: %v", err)
 		return nil
 	}
 	return resp
@@ -212,6 +227,11 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 		success = true
 		value = resp.Value
 	} else {
+		me := utils.GetClient(&s.nodeToClient, currNodeName)
+		abortResult := PerformAbortCoordinatorWrapper(me, &protos.TxnIdPayload{TxnId: payload.ID})
+		if abortResult == nil || !abortResult.Success {
+			logrusLogger.WithField("node", currNodeName).Fatal("PerformAbortCoordinatorWrapper failed")
+		}
 		success = false
 		value = 0
 	}
@@ -325,11 +345,10 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	res, timestampedConcurrencyID = GetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID)
 	if !res {
 		timestampedConcurrencyID = SetTimestampedConcurrencyID(&s.txnIDToTimestampedConcurrencyID, txnID, &s.timestampedConcurrencyID)
-		s.timestampedConcurrencyIDToState.Mu.Lock()
-		s.timestampedConcurrencyIDToState.M[timestampedConcurrencyID] = &SafeTransactionState{state: In_Progress}
-		s.timestampedConcurrencyIDToState.Mu.Unlock()
-		// CreateTxnChannel(&s.txnIDToChannel, timestampedConcurrencyID)
+		InitTimestampedConcurrencyIDToStatePtr(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
+		InitSafeTimestampedConcurrencyIDToObjectsInvolved(&s.timestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID)
 	}
+	AddObjectToTimestampedConcurrencyIDToObjectsInvolved(&s.timestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID, objectName)
 	logrusLogger.WithField("node", currNodeName).Debug("Timestamped Concurrency ID for transaction ID ", payload.ID, " is ", timestampedConcurrencyID)
 
 	if strings.ToLower(payload.Operation) == "deposit" || strings.ToLower(payload.Operation) == "withdraw" {
@@ -343,7 +362,7 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 func (s *distributedTransactionsServer) AbortCoordinator(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	mapOfServersInvolved := GetServersInvolvedInTxn(s)
 	logrusLogger.WithField("node", currNodeName).Debug("Aborting transaction ", payload.TxnId, " on servers ", *mapOfServersInvolved[payload.TxnId])
-	for serverName, _ := range *mapOfServersInvolved[payload.TxnId] {
+	for serverName := range *mapOfServersInvolved[payload.TxnId] {
 		peer := utils.GetClient(&s.nodeToClient, serverName)
 		PeerWrapper(peer, payload, "AbortPeer")
 	}
@@ -385,7 +404,7 @@ func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *
 }
 
 func PeerWrapper(peer protos.DistributedTransactionsClient, payload *protos.TxnIdPayload, rpcType string) *protos.Reply {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), timeoutVal)
 	var resp *protos.Reply
 	var err error
 

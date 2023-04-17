@@ -18,6 +18,7 @@ import (
 
 var logrusLogger = logrus.New()
 var clientID string
+var timeoutVal = 24 * time.Hour
 
 func getServerNames(nodeToClient map[string]protos.DistributedTransactionsClient) []string {
 	servers := make([]string, len(nodeToClient))
@@ -36,7 +37,7 @@ func pickRandomNode(nodeToClient map[string]protos.DistributedTransactionsClient
 }
 
 func beginTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
 	defer cancel()
 	resp, err := client.BeginTransaction(ctx, payload)
 	if err != nil {
@@ -47,7 +48,7 @@ func beginTransaction(nodeName string, client protos.DistributedTransactionsClie
 }
 
 func abortTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
 	defer cancel()
 	resp, err := client.AbortCoordinator(ctx, payload)
 	if err != nil {
@@ -58,7 +59,7 @@ func abortTransaction(nodeName string, client protos.DistributedTransactionsClie
 }
 
 func commitTransaction(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TxnIdPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
 	defer cancel()
 	resp, err := client.CommitCoordinator(ctx, payload)
 	if err != nil {
@@ -69,7 +70,7 @@ func commitTransaction(nodeName string, client protos.DistributedTransactionsCli
 }
 
 func performOp(nodeName string, client protos.DistributedTransactionsClient, payload *protos.TransactionOpPayload) *protos.Reply {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutVal)
 	defer cancel()
 	resp, err := client.PerformOperationCoordinator(ctx, payload)
 	if err != nil {

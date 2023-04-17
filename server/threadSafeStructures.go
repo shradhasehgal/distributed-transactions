@@ -34,6 +34,12 @@ type SafeTimestampedConcurrencyIDToStatePtr struct {
 	M  map[uint32]*SafeTransactionState
 }
 
+func InitTimestampedConcurrencyIDToStatePtr(s *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID uint32) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.M[timestampedConcurrencyID] = &SafeTransactionState{state: In_Progress}
+}
+
 func GetTransactionState(timestampedConcurrencyIDToStatePtr *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID uint32) *SafeTransactionState {
 	defer timestampedConcurrencyIDToStatePtr.Mu.RUnlock()
 	timestampedConcurrencyIDToStatePtr.Mu.RLock()
@@ -56,6 +62,39 @@ type SafeObjectState struct {
 type SafeTxnIdToServersInvolvedPtr struct {
 	Mu sync.RWMutex
 	M  map[string]*(map[string]bool) // txn ID given by client to a pointer to map of server names involved in TXN
+}
+
+type SafeObjectsSet struct {
+	Mu sync.RWMutex
+	M  map[string]bool // object names involved in TXN
+}
+
+type SafeTimestampedConcurrencyIDToObjectsInvolved struct {
+	Mu sync.RWMutex
+	M  map[uint32]*SafeObjectsSet // timestampedConcurrencyID to map of object names involved in TXN
+}
+
+func InitSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.M[timestampedConcurrencyID] = &SafeObjectsSet{M: make(map[string]bool)}
+}
+
+func AddObjectToTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32, objectName string) {
+	s.Mu.RLock()
+	objectsInvolved := s.M[timestampedConcurrencyID]
+	s.Mu.RUnlock()
+	objectsInvolved.Mu.RLock()
+	_, ok := objectsInvolved.M[objectName]
+	if ok {
+		objectsInvolved.Mu.RUnlock()
+		return
+	} else {
+		objectsInvolved.Mu.RUnlock()
+		objectsInvolved.Mu.Lock()
+		objectsInvolved.M[objectName] = true
+		objectsInvolved.Mu.Unlock()
+	}
 }
 
 func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*(map[string]bool) {
