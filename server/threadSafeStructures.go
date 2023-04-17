@@ -57,6 +57,7 @@ type SafeObjectState struct {
 	committedVal       int32
 	committedTimestamp uint32
 	name               string
+	isCommitted        bool
 }
 
 type SafeTxnIdToServersInvolvedPtr struct {
@@ -103,6 +104,22 @@ func AddObjectToTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConc
 	}
 }
 
+func SetObjectCommitted(s *SafeObjectNameToStatePtr, objectName string) {
+	s.Mu.RLock()
+	objectState := s.M[objectName]
+	s.Mu.RUnlock()
+	objectState.Mu.RLock()
+	if objectState.isCommitted {
+		objectState.Mu.RUnlock()
+		return
+	} else {
+		objectState.Mu.RUnlock()
+		objectState.Mu.Lock()
+		objectState.isCommitted = true
+		objectState.Mu.Unlock()
+	}
+}
+
 func GetServersInvolvedInTxn(s *distributedTransactionsServer) map[string]*(map[string]bool) {
 	s.safeTxnIDToServerInvolved.Mu.RLock()
 	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
@@ -134,6 +151,25 @@ func GetObjectState(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName s
 		return val
 	}
 	return nil
+}
+
+func IsObjectReadable(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName string, timestampedConcurrencyID uint32) bool {
+	defer objectNameToStatePtr.Mu.RUnlock()
+	objectNameToStatePtr.Mu.RLock()
+	if val, ok := objectNameToStatePtr.M[objectName]; ok {
+		val.Mu.RLock()
+		defer val.Mu.RUnlock()
+		if val.committedTimestamp != 0 {
+			return true
+		} else {
+			if _, ok := val.tentativeWrites[timestampedConcurrencyID]; ok {
+				return true
+			} else {
+				return false
+			}
+		}
+	}
+	return false
 }
 
 func SetObjectState(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName string, objectState *SafeObjectState) {
