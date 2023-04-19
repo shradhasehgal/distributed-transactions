@@ -102,8 +102,7 @@ func main() {
 	servers := getServerNames(nodeToClient.M)
 
 	scanner := bufio.NewScanner(os.Stdin)
-	txnID := 0
-
+	txnID := ""
 	var coordinatorClient protos.DistributedTransactionsClient
 	for scanner.Scan() {
 		command := scanner.Text()
@@ -112,15 +111,15 @@ func main() {
 			continue
 		}
 		if strings.ToLower(commandInfo[0]) == "begin" {
-			txnID++
+			now := time.Now().Unix() // current local time
 			if len(commandInfo) != 1 {
 				continue
 			}
+			txnID = fmt.Sprintf("%d-%s", now, clientID)
 			coordinator := pickRandomNode(nodeToClient.M, servers)
 			logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
-			txnID++
 			coordinatorClient = nodeToClient.M[coordinator]
-			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {
 				fmt.Println("OK")
 			}
@@ -131,7 +130,7 @@ func main() {
 			destinationDetails := strings.Split(commandInfo[1], ".")
 			amount, _ := strconv.ParseInt(commandInfo[2], 10, 32)
 
-			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "DEPOSIT", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: txnID, Operation: "DEPOSIT", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
 			if reply.Success {
 				fmt.Println("OK")
 			} else {
@@ -144,7 +143,7 @@ func main() {
 			destinationDetails := strings.Split(commandInfo[1], ".")
 			amount, _ := strconv.ParseInt(commandInfo[2], 10, 32)
 
-			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "WITHDRAW", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: txnID, Operation: "WITHDRAW", Account: destinationDetails[1], Branch: destinationDetails[0], Amount: int32(amount)})
 			if reply.Success {
 				fmt.Println("OK")
 			} else {
@@ -155,7 +154,7 @@ func main() {
 				continue
 			}
 			destinationDetails := strings.Split(commandInfo[1], ".")
-			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: fmt.Sprint(txnID, "-", clientID), Operation: "BALANCE", Account: destinationDetails[1], Branch: destinationDetails[0]})
+			reply := performOp(clientID, coordinatorClient, &protos.TransactionOpPayload{ID: txnID, Operation: "BALANCE", Account: destinationDetails[1], Branch: destinationDetails[0]})
 			if reply.Success {
 				fmt.Printf("%s = %d\n", commandInfo[1], reply.Value)
 			} else {
@@ -165,7 +164,7 @@ func main() {
 			if len(commandInfo) != 1 {
 				continue
 			}
-			reply := commitTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := commitTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {
 				fmt.Println("COMMIT OK")
 			} else {
@@ -175,7 +174,7 @@ func main() {
 			if len(commandInfo) != 1 {
 				continue
 			}
-			reply := abortTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
+			reply := abortTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {
 				fmt.Println("ABORTED")
 			}

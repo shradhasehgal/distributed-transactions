@@ -186,7 +186,7 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 					break
 				}
 			} else {
-				logrusLogger.WithField("node", currNodeName).Debug("No need to wait on any other transactions to commit for objectName %s before committing txn ID ", objectName, timestampedConcurrencyID)
+				logrusLogger.WithField("node", currNodeName).Debug("No need to wait on any other transactions to commit for objectName ", objectName, " before committing txn ID ", timestampedConcurrencyID)
 				break
 			}
 		}
