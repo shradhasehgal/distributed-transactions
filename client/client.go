@@ -117,7 +117,7 @@ func main() {
 				continue
 			}
 			coordinator := pickRandomNode(nodeToClient.M, servers)
-			logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
+			// logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
 			txnID++
 			coordinatorClient = nodeToClient.M[coordinator]
 			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
