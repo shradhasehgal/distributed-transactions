@@ -18,13 +18,14 @@ func SetClient(clientMap *SafeRPCClientMap, nodeName string, client protos.Distr
 }
 
 func GetClient(clientMap *SafeRPCClientMap, nodeName string) protos.DistributedTransactionsClient {
-	defer clientMap.Mu.RUnlock()
 	clientMap.Mu.RLock()
 	for {
 		client, ok := clientMap.M[nodeName]
 		if ok {
+			clientMap.Mu.RUnlock()
 			return client
 		}
+		clientMap.Mu.RUnlock()
 		time.Sleep(500 * time.Millisecond)
 	}
 }
