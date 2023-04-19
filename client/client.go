@@ -135,6 +135,8 @@ func main() {
 				fmt.Println("OK")
 			} else {
 				fmt.Println("ABORTED")
+				return
+
 			}
 		} else if strings.ToLower(commandInfo[0]) == "withdraw" {
 			if len(commandInfo) != 3 {
@@ -148,6 +150,7 @@ func main() {
 				fmt.Println("OK")
 			} else {
 				fmt.Println("ABORTED")
+				return
 			}
 		} else if strings.ToLower(commandInfo[0]) == "balance" {
 			if len(commandInfo) != 2 {
@@ -159,6 +162,7 @@ func main() {
 				fmt.Printf("%s = %d\n", commandInfo[1], reply.Value)
 			} else {
 				fmt.Println("ABORTED")
+				return
 			}
 		} else if strings.ToLower(commandInfo[0]) == "commit" {
 			if len(commandInfo) != 1 {
@@ -169,6 +173,7 @@ func main() {
 				fmt.Println("COMMIT OK")
 			} else {
 				fmt.Println("ABORTED")
+				return
 			}
 		} else if strings.ToLower(commandInfo[0]) == "abort" {
 			if len(commandInfo) != 1 {
@@ -177,6 +182,7 @@ func main() {
 			reply := abortTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {
 				fmt.Println("ABORTED")
+				return
 			}
 		}
 	}
