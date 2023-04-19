@@ -508,7 +508,7 @@ func main() {
 	currNodeName = arguments[1]
 	config := arguments[2]
 	// initGob()
-	utils.InitlogrusLogger(logrusLogger)
+	utils.InitlogrusLogger(logrusLogger, logrus.DebugLevel)
 
 	logrusLogger.WithField("node", currNodeName).Debug("Starting node ", currNodeName, " with config file ", config)
 

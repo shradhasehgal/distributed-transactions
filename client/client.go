@@ -89,7 +89,7 @@ func main() {
 	var wg sync.WaitGroup
 	clientID = arguments[1]
 	config := arguments[2]
-	utils.InitlogrusLogger(logrusLogger)
+	utils.InitlogrusLogger(logrusLogger, logrus.InfoLevel)
 	nodeToUrl := map[string]string{}
 	nodeToClient := utils.SafeRPCClientMap{M: make(map[string]protos.DistributedTransactionsClient)}
 	logrusLogger.WithField("node", clientID).Debug("Starting node ", clientID, " with config file ", config)
@@ -117,7 +117,7 @@ func main() {
 				continue
 			}
 			coordinator := pickRandomNode(nodeToClient.M, servers)
-			// logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
+			logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
 			txnID++
 			coordinatorClient = nodeToClient.M[coordinator]
 			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: fmt.Sprint(txnID, "-", clientID)})
