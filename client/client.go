@@ -111,13 +111,13 @@ func main() {
 			continue
 		}
 		if strings.ToLower(commandInfo[0]) == "begin" {
-			now := time.Now().Unix() // current local time
+			now := time.Now().UnixNano() // current local time
 			if len(commandInfo) != 1 {
 				continue
 			}
 			txnID = fmt.Sprintf("%d-%s", now, clientID)
 			coordinator := pickRandomNode(nodeToClient.M, servers)
-			logrusLogger.WithField("node", clientID).Debug("Coordinator for this transaction is: ", coordinator)
+			logrusLogger.WithField("node", clientID).Debug("Assigned timestamp for txn", txnID, " and coordinator: ", coordinator)
 			coordinatorClient = nodeToClient.M[coordinator]
 			reply := beginTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {

@@ -3,6 +3,7 @@ package utils
 import (
 	"protos"
 	"sync"
+	"time"
 )
 
 type SafeRPCClientMap struct {
@@ -19,7 +20,13 @@ func SetClient(clientMap *SafeRPCClientMap, nodeName string, client protos.Distr
 func GetClient(clientMap *SafeRPCClientMap, nodeName string) protos.DistributedTransactionsClient {
 	defer clientMap.Mu.RUnlock()
 	clientMap.Mu.RLock()
-	return clientMap.M[nodeName]
+	for {
+		client, ok := clientMap.M[nodeName]
+		if ok {
+			return client
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // type SafeEncoderMap struct {

@@ -248,9 +248,7 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 	(*mapOfServersInvolved)[payload.Branch] = true
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
-	if peer == nil {
-		return &protos.Reply{Success: false, Value: 0}, nil
-	}
+
 	resp := PerformOperationPeerWrapper(peer, payload)
 	var success bool
 	var value int32
