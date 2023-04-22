@@ -136,7 +136,6 @@ func main() {
 			} else {
 				fmt.Println("ABORTED")
 				return
-
 			}
 		} else if strings.ToLower(commandInfo[0]) == "withdraw" {
 			if len(commandInfo) != 3 {
@@ -161,7 +160,11 @@ func main() {
 			if reply.Success {
 				fmt.Printf("%s = %d\n", commandInfo[1], reply.Value)
 			} else {
-				fmt.Println("ABORTED")
+				if reply.Value == -1 {
+					fmt.Println("NOT FOUND, ABORTED")
+				} else {
+					fmt.Println("ABORTED")
+				}
 				return
 			}
 		} else if strings.ToLower(commandInfo[0]) == "commit" {

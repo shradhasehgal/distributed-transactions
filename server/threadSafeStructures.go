@@ -31,31 +31,27 @@ type SafeTransactionState struct {
 
 type SafeTimestampedConcurrencyIDToStatePtr struct {
 	Mu sync.RWMutex
-	M  map[uint32]*SafeTransactionState
+	M  map[string]*SafeTransactionState
 }
 
-func InitTimestampedConcurrencyIDToStatePtr(s *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID uint32) {
+func InitTimestampedConcurrencyIDToStatePtr(s *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	s.M[timestampedConcurrencyID] = &SafeTransactionState{state: In_Progress}
 }
 
-func GetTransactionState(timestampedConcurrencyIDToStatePtr *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID uint32) *SafeTransactionState {
+func GetTransactionState(timestampedConcurrencyIDToStatePtr *SafeTimestampedConcurrencyIDToStatePtr, timestampedConcurrencyID string) *SafeTransactionState {
 	defer timestampedConcurrencyIDToStatePtr.Mu.RUnlock()
 	timestampedConcurrencyIDToStatePtr.Mu.RLock()
 	return timestampedConcurrencyIDToStatePtr.M[timestampedConcurrencyID]
 }
 
-type TimestampVal struct {
-	value     int32
-	timestamp uint32
-}
 type SafeObjectState struct {
 	Mu                 sync.RWMutex
-	readTimestamps     map[uint32]bool
-	tentativeWrites    map[uint32]int32
+	readTimestamps     map[string]bool
+	tentativeWrites    map[string]int32
 	committedVal       int32
-	committedTimestamp uint32
+	committedTimestamp string
 	name               string
 	isCommitted        bool
 }
@@ -72,22 +68,22 @@ type SafeObjectsSet struct {
 
 type SafeTimestampedConcurrencyIDToObjectsInvolved struct {
 	Mu sync.RWMutex
-	M  map[uint32]*SafeObjectsSet // timestampedConcurrencyID to map of object names involved in TXN
+	M  map[string]*SafeObjectsSet // timestampedConcurrencyID to map of object names involved in TXN
 }
 
-func InitSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32) {
+func InitSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	s.M[timestampedConcurrencyID] = &SafeObjectsSet{M: make(map[string]bool)}
 }
 
-func GetSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32) *SafeObjectsSet {
+func GetSafeTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID string) *SafeObjectsSet {
 	defer s.Mu.RUnlock()
 	s.Mu.RLock()
 	return s.M[timestampedConcurrencyID]
 }
 
-func AddObjectToTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID uint32, objectName string) {
+func AddObjectToTimestampedConcurrencyIDToObjectsInvolved(s *SafeTimestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID string, objectName string) {
 	s.Mu.RLock()
 	objectsInvolved := s.M[timestampedConcurrencyID]
 	s.Mu.RUnlock()
@@ -153,13 +149,13 @@ func GetObjectState(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName s
 	return nil
 }
 
-func IsObjectReadable(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName string, timestampedConcurrencyID uint32) bool {
+func IsObjectReadable(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName string, timestampedConcurrencyID string) bool {
 	defer objectNameToStatePtr.Mu.RUnlock()
 	objectNameToStatePtr.Mu.RLock()
 	if val, ok := objectNameToStatePtr.M[objectName]; ok {
 		val.Mu.RLock()
 		defer val.Mu.RUnlock()
-		if val.committedTimestamp != 0 {
+		if val.committedTimestamp != "" {
 			return true
 		} else {
 			if _, ok := val.tentativeWrites[timestampedConcurrencyID]; ok {
@@ -178,24 +174,16 @@ func SetObjectState(objectNameToStatePtr *SafeObjectNameToStatePtr, objectName s
 	objectNameToStatePtr.M[objectName] = objectState
 }
 
-type SafeTxnIDToTimestampedConcurrencyID struct {
+type SafeTimestampedConcurrencyIDSet struct {
 	Mu sync.RWMutex
-	M  map[string]uint32 // txn ID given by client to the transaction ID used during timestamped concurrency
+	M  map[string]bool
 }
 
-func GetTimestampedConcurrencyID(txnIDToTimestampedConcurrencyID *SafeTxnIDToTimestampedConcurrencyID, txnID string) (bool, uint32) {
+func GetTimestampedConcurrencyID(txnIDToTimestampedConcurrencyID *SafeTimestampedConcurrencyIDSet, txnID string) bool {
 	defer txnIDToTimestampedConcurrencyID.Mu.Unlock()
 	txnIDToTimestampedConcurrencyID.Mu.Lock()
-	if val, ok := txnIDToTimestampedConcurrencyID.M[txnID]; ok {
-		return true, val
+	if _, ok := txnIDToTimestampedConcurrencyID.M[txnID]; ok {
+		return true
 	}
-	return false, 0
-}
-
-func SetTimestampedConcurrencyID(txnIDToTimestampedConcurrencyID *SafeTxnIDToTimestampedConcurrencyID, txnID string, timestampedConcurrencyID *uint32) uint32 {
-	defer txnIDToTimestampedConcurrencyID.Mu.Unlock()
-	txnIDToTimestampedConcurrencyID.Mu.Lock()
-	*timestampedConcurrencyID++
-	txnIDToTimestampedConcurrencyID.M[txnID] = *timestampedConcurrencyID
-	return *timestampedConcurrencyID
+	return false
 }
