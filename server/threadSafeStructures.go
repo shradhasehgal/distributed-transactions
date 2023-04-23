@@ -180,10 +180,16 @@ type SafeTimestampedConcurrencyIDSet struct {
 }
 
 func GetTimestampedConcurrencyID(txnIDToTimestampedConcurrencyID *SafeTimestampedConcurrencyIDSet, txnID string) bool {
-	defer txnIDToTimestampedConcurrencyID.Mu.Unlock()
-	txnIDToTimestampedConcurrencyID.Mu.Lock()
+	defer txnIDToTimestampedConcurrencyID.Mu.RUnlock()
+	txnIDToTimestampedConcurrencyID.Mu.RLock()
 	if _, ok := txnIDToTimestampedConcurrencyID.M[txnID]; ok {
 		return true
 	}
 	return false
+}
+
+func SetTimestampedConcurrencyID(txnIDToTimestampedConcurrencyID *SafeTimestampedConcurrencyIDSet, txnID string) {
+	defer txnIDToTimestampedConcurrencyID.Mu.Unlock()
+	txnIDToTimestampedConcurrencyID.Mu.Lock()
+	txnIDToTimestampedConcurrencyID.M[txnID] = true
 }
