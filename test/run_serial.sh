@@ -62,7 +62,9 @@ permutations=($(generate_permutations "${my_array[@]}"))
 # Print the permutations
 echo "Permutations:"
 count=0
-rm -rf $(pwd)'/testcase/*'
+to_remove=$(pwd)'/testcase'
+echo $to_remove
+rm -rf $to_remove
 
 mkdir testcase
 for perm in "${permutations[@]}"; do
