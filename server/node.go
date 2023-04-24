@@ -370,6 +370,7 @@ func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpP
 			}
 			if maxTs == objectState.committedTimestamp {
 				if objectState.committedTimestamp == "" {
+					readBalance = -1
 					success = false
 					break
 				}
