@@ -29,8 +29,8 @@ run_servers(){
 #!/bin/bash
 
 # Define the array
-# my_array=("1" "2" "3" "4")
-my_array=("1" "2")
+my_array=("1" "2" "3" "4")
+# my_array=("1" "2")
 
 
 # Define a function to generate permutations
@@ -62,13 +62,16 @@ permutations=($(generate_permutations "${my_array[@]}"))
 # Print the permutations
 echo "Permutations:"
 count=0
+rm -rf $(pwd)'/testcase/*'
+
+mkdir testcase
 for perm in "${permutations[@]}"; do
-    mkdir $count
-    out_folder=$(pwd)'/'${count}'/'
+    mkdir testcase/$count
+    out_folder=$(pwd)'/testcase/'${count}'/'
     run_servers
     for ((i = 0; i < ${#perm}; i++)); do
         test_no="${perm:$i:1}"
-        timeout -s SIGTERM 5s ./client ${permutations[$i]} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1
+        gtimeout -s SIGTERM 5s ./client ${permutations[$i]} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1
     done
     shutdown
     ((count++))

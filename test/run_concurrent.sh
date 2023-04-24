@@ -5,8 +5,9 @@ curr_folder=$(pwd)'/'
 servers=(A B C D E)
 ports=(10001 10002 10003 10004 10005)
 
-perm="12"
-num=2
+perm="1234"
+len=4
+num=24
 
 # shutdown servers
 shutdown() {
@@ -23,19 +24,23 @@ for server in ${servers[@]}; do
 	./server $server config.txt > ../server_${server}.log 2>&1 &
 done
 
-out_folder=$(pwd)'/concurrent/'
+out_folder=$(pwd)'/testcase/concurrent/'
 mkdir $out_folder
 for ((i = 0; i < ${#perm}; i++)); do
     test_no="${perm:$i:1}"
-    timeout -s SIGTERM 5s ./client ${permutations[$i]} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1 &
+    echo ${test_no}
+    # cmd="gtimeout -s SIGTERM 5s ./client ${test_no} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1 &"
+    # echo $cmd
+    gtimeout -s SIGTERM 5s ./client ${test_no} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1 &
+    # $cmd
 done
 
-sleep 10
+sleep 5
 
 dir1=$out_folder
 found=0
 for ((i = 0; i < num; i++)); do
-    dir2=$i
+    dir2=$(pwd)'/testcase/'$i'/'
   # Compare the contents of the two directories using the 'diff' command
     diff_output=$(diff -rq "$dir1" "$dir2")
 
