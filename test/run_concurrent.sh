@@ -30,6 +30,8 @@ for ((i = 0; i < ${#perm}; i++)); do
     timeout -s SIGTERM 5s ./client ${permutations[$i]} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1 &
 done
 
+sleep 10
+
 dir1=$out_folder
 found=0
 for ((i = 0; i < num; i++)); do
