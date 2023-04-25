@@ -258,7 +258,7 @@ func isTsGreater(t1 string, t2 string) bool {
 	return t1 > t2
 }
 
-func handleAlterAtomic(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID string) bool {
+func handleAlterAtomic(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID string) (bool, int32) {
 	var readResult, success bool
 	var readBalance int32
 	for {
@@ -278,7 +278,7 @@ func handleAlterAtomic(s *distributedTransactionsServer, payload *protos.Transac
 			if maxTs == objectState.committedTimestamp {
 				if objectState.committedTimestamp == "" && strings.ToLower(payload.Operation) == "withdraw" {
 					logrusLogger.WithField("node", currNodeName).Debug("Can't perform withdraw in transaction ID ", payload.ID, " on account ", objectState.name, " because account does not exist yet!")
-
+					readBalance = -1
 					success = false
 					break
 				}
@@ -349,7 +349,7 @@ func handleAlterAtomic(s *distributedTransactionsServer, payload *protos.Transac
 		}
 	}
 	objectState.Mu.Unlock()
-	return success
+	return success, readBalance
 }
 
 func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpPayload, objectState *SafeObjectState, timestampedConcurrencyID string) (bool, int32) {
@@ -445,7 +445,7 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	}
 
 	if strings.ToLower(payload.Operation) == "deposit" || strings.ToLower(payload.Operation) == "withdraw" {
-		success = handleAlterAtomic(s, payload, objectState, timestampedConcurrencyID)
+		success, readValue = handleAlterAtomic(s, payload, objectState, timestampedConcurrencyID)
 	} else if strings.ToLower(payload.Operation) == "balance" {
 		success, readValue = handleRead(s, payload, objectState, timestampedConcurrencyID)
 	}

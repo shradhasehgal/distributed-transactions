@@ -148,7 +148,11 @@ func main() {
 			if reply.Success {
 				fmt.Println("OK")
 			} else {
-				fmt.Println("ABORTED")
+				if reply.Value == -1 {
+					fmt.Println("NOT FOUND, ABORTED")
+				} else {
+					fmt.Println("ABORTED")
+				}
 				return
 			}
 		} else if strings.ToLower(commandInfo[0]) == "balance" {
