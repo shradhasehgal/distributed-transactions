@@ -27,7 +27,7 @@ done
 sleep 5
 
 out_folder=$(pwd)'/testcase/concurrent/'
-mkdir $out_folder
+mkdir -p $out_folder
 for ((i = 0; i < ${#perm}; i++)); do
     test_no="${perm:$i:1}"
     echo ${test_no}
