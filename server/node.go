@@ -58,6 +58,8 @@ func Max(x, y int) int {
 func (s *distributedTransactionsServer) BeginTransaction(ctx context.Context, payload *protos.TxnIdPayload) (*protos.Reply, error) {
 	s.safeTxnIDToServerInvolved.Mu.Lock()
 	defer s.safeTxnIDToServerInvolved.Mu.Unlock()
+	logrusLogger.WithField("node", currNodeName).Debug("I am coordinator for txn", payload.TxnId)
+
 	// var listOfServersInvolved = []string{}
 	var mapOfServersInvolved = make(map[string]bool)
 	s.safeTxnIDToServerInvolved.M[payload.TxnId] = &mapOfServersInvolved
@@ -231,7 +233,7 @@ func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.
 	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
 	mapOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
 	(*mapOfServersInvolved)[payload.Branch] = true
-	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " for transaction ID ", payload.ID)
+	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " on account", payload.Account, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
 
 	resp := PerformOperationPeerWrapper(peer, payload)
@@ -413,7 +415,7 @@ func handleRead(s *distributedTransactionsServer, payload *protos.TransactionOpP
 }
 
 func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
-	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " itself for transaction ID ", payload.ID)
+	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on itself for account", payload.Account, " related to transaction ID ", payload.ID)
 	timestampedConcurrencyID := payload.ID
 	var res bool
 	res = GetTimestampedConcurrencyID(&s.timestampedConcurrencyIDSet, timestampedConcurrencyID)
@@ -424,7 +426,7 @@ func (s *distributedTransactionsServer) PerformOperationPeer(ctx context.Context
 	}
 	objectName := payload.Account
 	AddObjectToTimestampedConcurrencyIDToObjectsInvolved(&s.timestampedConcurrencyIDToObjectsInvolved, timestampedConcurrencyID, objectName)
-	logrusLogger.WithField("node", currNodeName).Debug("Timestamped Concurrency ID for transaction ID ", payload.ID, " is ", timestampedConcurrencyID)
+	// logrusLogger.WithField("node", currNodeName).Debug("Timestamped Concurrency ID for transaction ID ", payload.ID, " is ", timestampedConcurrencyID)
 
 	var success bool
 	var readValue int32
