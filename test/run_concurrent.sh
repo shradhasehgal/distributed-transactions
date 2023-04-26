@@ -37,25 +37,41 @@ for ((i = 0; i < ${#perm}; i++)); do
     # $cmd
 done
 
-sleep 5
+sleep 6
 
-dir1=$out_folder
-found=0
-for ((i = 0; i < num; i++)); do
-    dir2=$(pwd)'/testcase/'$i'/'
-  # Compare the contents of the two directories using the 'diff' command
-    diff_output=$(diff -rq "$dir1" "$dir2")
+# for ((i = 0; i < ${#perm}; i++)); do
+#     tail ${out_folder}output${test_no}.log | grep "ABORT"
+# done
 
-    # Check if the diff output is empty (i.e. the two directories are the same)
-    if [ -z "$diff_output" ]; then
-      found=1
-      # echo "The two directories are the same"
-  fi
+VARIABLE=`python3 debug.py ${out_folder}`
+
+# sleep 5
+# dir1=$out_folder
+# found=0
+# for ((i = 0; i < num; i++)); do
+#     dir2=$(pwd)'/testcase/'$i'/'
+#   # Compare the contents of the two directories using the 'diff' command
+#     diff_output=$(diff -rq "$dir1" "$dir2")
+
+#     # Check if the diff output is empty (i.e. the two directories are the same)
+#     if [ -z "$diff_output" ]; then
+#       found=1
+#       # echo "The two directories are the same"
+#   fi
+# done
+
+for ((i = 0; i < ${#perm}; i++)); do
+    test_no="${perm:$i:1}"
+    tail -n 1 ${out_folder}output${test_no}.log
 done
 
-if [ "$found" -eq 1 ]; then
-  echo "Same output found"
+if [ "$VARIABLE" != "FAIL" ]; then
+  
+  # echo $VARIABLE
+  echo "No deadlock"
 else
+  echo $VARIABLE
+  echo "OH NO dead"
   timestamp=$(date +%s)
   failed_logs_folder=$(pwd)'/failed/'$timestamp'/'
   echo "Creating folder $failed_logs_folder"
