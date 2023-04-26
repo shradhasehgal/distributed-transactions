@@ -24,6 +24,8 @@ for server in ${servers[@]}; do
 	./server $server config.txt > ../server_${server}.log 2>&1 &
 done
 
+sleep 5
+
 out_folder=$(pwd)'/testcase/concurrent/'
 mkdir $out_folder
 for ((i = 0; i < ${#perm}; i++)); do

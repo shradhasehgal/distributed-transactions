@@ -71,6 +71,7 @@ for perm in "${permutations[@]}"; do
     mkdir testcase/$count
     out_folder=$(pwd)'/testcase/'${count}'/'
     run_servers
+    sleep 3
     for ((i = 0; i < ${#perm}; i++)); do
         test_no="${perm:$i:1}"
         gtimeout -s SIGTERM 5s ./client ${permutations[$i]} config.txt < ${curr_folder}input${test_no}.txt > ${out_folder}output${test_no}.log 2>&1
