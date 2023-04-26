@@ -15,7 +15,7 @@ shutdown() {
 		kill -15 $(lsof -ti:$port)
 	done
 }
-trap shutdown EXIT
+# trap shutdown EXIT
 
 # initialize servers
 cp config.txt ${code_folder}/config.txt
@@ -56,8 +56,23 @@ done
 if [ "$found" -eq 1 ]; then
   echo "Same output found"
 else
+  timestamp=$(date +%s)
+  failed_logs_folder=$(pwd)'/failed/'$timestamp'/'
+  echo "Creating folder $failed_logs_folder"
+  mkdir -p $failed_logs_folder
+  for server in ${servers[@]}; do
+	  cp ../server_${server}.log $failed_logs_folder
+  done 
+  cp ${out_folder}output*.log $failed_logs_folder
+  for ((i = 0; i < ${#perm}; i++)); do
+    test_no="${perm:$i:1}"
+    cp ${curr_folder}input${test_no}.txt $failed_logs_folder
+  done
   echo "Did not match any output"
 fi
+
+shutdown
+sleep 2
 
 # cd $curr_folder
 # echo "Difference between your output and expected output:"

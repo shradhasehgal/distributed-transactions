@@ -29,7 +29,7 @@ while True:
     txn_execute = random.random() 
     if txn_execute < 0.05:
         commit_or_abort = random.random() 
-        if commit_or_abort < 0.5:
+        if commit_or_abort < 0.8:
             print(f"COMMIT")
         else:
             print("ABORT")
