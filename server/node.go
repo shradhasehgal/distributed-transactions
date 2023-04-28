@@ -183,6 +183,8 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 		// SetObjectCommitted(&s.objectNameToStatePtr, objectName)
 	}
 
+	s.objectNameToStatePtr.Mu.RLock()
+	defer s.objectNameToStatePtr.Mu.RUnlock()
 	for objectName, objectState := range s.objectNameToStatePtr.M {
 		objectState.Mu.Lock()
 		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
@@ -230,8 +232,8 @@ func PerformAbortCoordinatorWrapper(coordinator protos.DistributedTransactionsCl
 
 func (s *distributedTransactionsServer) PerformOperationCoordinator(ctx context.Context, payload *protos.TransactionOpPayload) (*protos.Reply, error) {
 	s.safeTxnIDToServerInvolved.Mu.RLock()
-	defer s.safeTxnIDToServerInvolved.Mu.RUnlock()
 	mapOfServersInvolved := s.safeTxnIDToServerInvolved.M[payload.ID]
+	s.safeTxnIDToServerInvolved.Mu.RUnlock()
 	(*mapOfServersInvolved)[payload.Branch] = true
 	logrusLogger.WithField("node", currNodeName).Debug("Performing operation ", payload.Operation, " on branch ", payload.Branch, " on account", payload.Account, " for transaction ID ", payload.ID)
 	peer := utils.GetClient(&s.nodeToClient, payload.Branch)
@@ -518,6 +520,8 @@ func (s *distributedTransactionsServer) PreparePeer(ctx context.Context, payload
 	logrusLogger.WithField("node", currNodeName).Debug("PREPARE PHASE: Validating consistency of transaction ", payload.TxnId)
 	var success bool = true
 	timestampedConcurrencyID := payload.TxnId
+	s.objectNameToStatePtr.Mu.RLock()
+	defer s.objectNameToStatePtr.Mu.RUnlock()
 	for _, objectState := range s.objectNameToStatePtr.M {
 		objectState.Mu.RLock()
 
