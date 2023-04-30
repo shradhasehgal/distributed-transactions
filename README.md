@@ -43,7 +43,7 @@ Execute the following commands:
 
 #### Build and run
 
-In the head, run
+In `mp3` folder, run
 
 ```
 go mod tidy
