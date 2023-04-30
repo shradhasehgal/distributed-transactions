@@ -185,6 +185,7 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 
 	s.objectNameToStatePtr.Mu.RLock()
 	defer s.objectNameToStatePtr.Mu.RUnlock()
+	var nonZeroFound bool = false
 	for objectName, objectState := range s.objectNameToStatePtr.M {
 		objectState.Mu.Lock()
 		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
@@ -194,10 +195,13 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 			delete(objectState.tentativeWrites, timestampedConcurrencyID)
 		}
 		if objectState.committedVal > 0 {
+			nonZeroFound = true
 			fmt.Printf("%s: %d, ", objectName, objectState.committedVal)
 		}
-
 		objectState.Mu.Unlock()
+	}
+	if nonZeroFound {
+		fmt.Println()
 	}
 
 	transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
@@ -302,7 +306,6 @@ func handleAlterAtomic(s *distributedTransactionsServer, payload *protos.Transac
 				objectState.Mu.Unlock()
 				transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, maxTs)
 				logrusLogger.WithField("node", currNodeName).Debug("Waiting for pointer to transaction state pointer")
-				fmt.Printf("%p\n", transactionState)
 				var state TransactionState = In_Progress
 				for state == In_Progress {
 					transactionState.Mu.RLock()
@@ -490,7 +493,6 @@ func (s *distributedTransactionsServer) AbortPeer(ctx context.Context, payload *
 	transactionState.Mu.Lock()
 	transactionState.state = Aborted
 	logrusLogger.WithField("node", currNodeName).Debug("Updating transaction state pointer: ")
-	fmt.Printf("%p\n", transactionState)
 	transactionState.Mu.Unlock()
 
 	return &protos.Reply{Success: true}, nil
