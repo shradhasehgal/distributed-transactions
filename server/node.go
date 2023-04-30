@@ -186,6 +186,7 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 	s.objectNameToStatePtr.Mu.RLock()
 	defer s.objectNameToStatePtr.Mu.RUnlock()
 	var nonZeroFound bool = false
+	var objectNameToVal map[string]int32 = make(map[string]int32)
 	for objectName, objectState := range s.objectNameToStatePtr.M {
 		objectState.Mu.Lock()
 		_, ok := objectState.tentativeWrites[timestampedConcurrencyID]
@@ -196,12 +197,25 @@ func (s *distributedTransactionsServer) CommitPeer(ctx context.Context, payload 
 		}
 		if objectState.committedVal > 0 {
 			nonZeroFound = true
-			fmt.Printf("%s: %d, ", objectName, objectState.committedVal)
+			objectNameToVal[objectName] = objectState.committedVal
 		}
 		objectState.Mu.Unlock()
 	}
 	if nonZeroFound {
-		fmt.Println()
+		keys := make([]string, 0, len(objectNameToVal))
+
+		for k := range objectNameToVal {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+		for idx, val := range keys {
+			fmt.Printf("%s: %d", val, objectNameToVal[val])
+			if idx != len(keys)-1 {
+				fmt.Print(", ")
+			} else {
+				fmt.Println()
+			}
+		}
 	}
 
 	transactionState := GetTransactionState(&s.timestampedConcurrencyIDToState, timestampedConcurrencyID)
