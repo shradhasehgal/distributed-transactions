@@ -178,6 +178,7 @@ func main() {
 			reply := commitTransaction(clientID, coordinatorClient, &protos.TxnIdPayload{TxnId: txnID})
 			if reply.Success {
 				fmt.Println("COMMIT OK")
+				return
 			} else {
 				fmt.Println("ABORTED")
 				return
